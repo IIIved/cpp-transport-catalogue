@@ -4,6 +4,7 @@
 
 #include <iomanip>
 #include <iostream>
+#include "geo.h"
 
 using namespace transport_catalogue;
 
@@ -11,14 +12,14 @@ namespace stat_reader {
     
 void PrintInfo(TransportCatalogue& db,
     const std::vector<std::pair<std::string, std::string>>
-    queries, int precision = 9, std::ostream& out = std::cout);
+    queries, std::ostream& out = std::cout);
 
-void PrintBusInfo(const BUS_Info& bus, int precision = 9,
+void PrintBusInfo(const Bus_info& bus,
                   std::ostream& out = std::cout);
-void PrintStopInfo(const STOP_Info& stop,
+void PrintStopInfo(const Stop_info& stop,
                    std::ostream& out = std::cout);
 
-void PrintStops(const TransportCatalogue& tc, int precision = 9,
+void PrintStops(const TransportCatalogue& tc,
                 std::ostream& out = std::cout);
 void PrintBuses(const TransportCatalogue& tc,
                 std::ostream& out = std::cout);

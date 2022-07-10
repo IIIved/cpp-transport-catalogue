@@ -7,11 +7,15 @@ using namespace input_reader;
 using namespace stat_reader;
 using namespace std::string_literals;
 using namespace std::string_view_literals;
+//ParsingInformationAboutTheBus
 
 int main() {
+
+
     TransportCatalogue tc;
     auto queries = QueriesToDataBase(tc);   
-    PrintInfo(tc, queries, 6);
+    PrintInfo(tc, queries);
+
 
     return 0;
 }

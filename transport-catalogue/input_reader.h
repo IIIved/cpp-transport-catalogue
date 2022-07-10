@@ -3,8 +3,9 @@
 #include "transport_catalogue.h"
 
 #include <algorithm>
-#include <iomanip> 
+#include <iomanip>
 #include <iostream>
+//#include <sstream>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -14,17 +15,17 @@ using namespace transport_catalogue;
 
 namespace input_reader {
 
-std::vector<std::pair<std::string, std::string>>
-QueriesToDataBase(TransportCatalogue& db);
+    std::vector<std::pair<std::string, std::string>>
+    QueriesToDataBase(TransportCatalogue& db, std::istream& in = std::cin);
 
-bool IsIntNumber(std::string_view symbols);
+    bool IsIntNumber(std::string_view symbols);
 
-std::string_view Trim(std::string_view value);
+    std::string_view Trim(std::string_view value);
 
-std::vector<std::string_view>
-Split(const std::string_view line, char delimiter,
-      bool trimmed = false);
-void Split(const std::string_view line, char delimiter,
-           std::vector<std::string>& tokens, bool trimmed = false);
+    std::vector<std::string_view>
+    Split(const std::string_view line, char delimiter,
+          bool trimmed = false);
+    void Split(const std::string_view line, char delimiter,
+               std::vector<std::string>& tokens, bool trimmed = false);
 
 }

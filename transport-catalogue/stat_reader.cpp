@@ -1,14 +1,18 @@
 #include "stat_reader.h"
+#include "geo.h"
+
+const int precision = 9;
 
 namespace stat_reader {
-    
+    using namespace geo;
+
 void PrintInfo(TransportCatalogue& db,
     const std::vector<std::pair<std::string, std::string>>
-    queries, int precision, std::ostream& out) {
+    queries, std::ostream& out) {
     for (const auto& query : queries) {
         if (query.first == "Bus") {
             auto bus_info = db.GetBusInfo(query.second);
-            PrintBusInfo(bus_info, precision, out);
+            PrintBusInfo(bus_info,  out);
             continue;
         }
         if (query.first == "Stop") {
@@ -18,8 +22,8 @@ void PrintInfo(TransportCatalogue& db,
     }
 }
 
-void PrintBusInfo(const BUS_Info& bus,
-                  int precision, std::ostream& out) {
+void PrintBusInfo(const Bus_info& bus,
+                  std::ostream& out) {
     out << std::setprecision(precision)
         << "Bus " << bus.name << ": ";
     if (bus.route_stops > 0) {
@@ -33,9 +37,9 @@ void PrintBusInfo(const BUS_Info& bus,
     out << std::endl;
 }
 
-void PrintStopInfo(const STOP_Info& stop, std::ostream& out) {
+void PrintStopInfo(const Stop_info& stop, std::ostream& out) {
     out << "Stop " << stop.name << ": ";
-    if (stop.exists) {
+    if (stop.is_exists) {
         if (stop.buses.size() > 0) {
             out << "buses";
             for (auto bus : stop.buses) {
@@ -51,12 +55,12 @@ void PrintStopInfo(const STOP_Info& stop, std::ostream& out) {
 }
 
 void PrintStops(const TransportCatalogue& tc,
-                int precision, std::ostream& out) {
+                std::ostream& out) {
     for (auto& [key, coords] : tc.GetStops()) {
         out << std::setprecision(precision)
             << "Stop [" << key
-            << "]: " << coords->latitude
-            << ", " << coords->longitude << std::endl;
+            << "]: " << coords->coordinates_.lat
+            << ", " << coords->coordinates_.lng << std::endl;
     }
 }
 

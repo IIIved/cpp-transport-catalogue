@@ -5,11 +5,12 @@ using namespace std::string_view_literals;
 using namespace transport_catalogue;
 
 namespace input_reader {
-    
+
+
 const std::string_view WHITESPACE = " \f\n\r\t\v"sv;
 
 std::vector<std::pair<std::string, std::string>>
-QueriesToDataBase(TransportCatalogue& db) {
+QueriesToDataBase(TransportCatalogue& db, std::istream& in  ) {
     std::unordered_map<std::string,
         std::vector<std::pair<std::string, int>>> distances;
     std::unordered_map<std::string,
@@ -17,21 +18,22 @@ QueriesToDataBase(TransportCatalogue& db) {
     std::vector<std::pair<std::string, std::string>> queries;
     std::string line;
     int count = 0;
-    std::cin >> count;
+    in >> count;
     ++count;
     while (count > 0) {
-        std::getline(std::cin, line);
+        std::getline(in, line);
         if (line.size() == 0) {
             continue;
         }
         --count;
         std::string_view line_sv = Trim(line);
-        
+// Number of queries
         if (IsIntNumber(line_sv)) {
             count = std::atoi(std::string(line_sv).data());
             continue;
         }
 
+// Queries to add
         if (line_sv.find(':') != line_sv.npos) {
             auto tokens = Split(line_sv, ':');
             if (tokens.size() < 2) {
@@ -45,23 +47,23 @@ QueriesToDataBase(TransportCatalogue& db) {
 
             auto key = tokens[0].substr(0, pos);
             auto name = Trim(tokens[0].substr(pos));
-
+        // "Stop" has top priority to add.
             if (key == "Stop") {
                 auto values = Split(tokens[1], ',');
                 auto value_size = values.size();
                 if (value_size < 2) {
                     continue;
                 }
-                double lat = 
+                double lat =
                 std::atof(std::string(values[0]).data());
-                double lon = 
+                double lon =
                 std::atof(std::string(values[1]).data());
- 
+                // Add to data base
                 db.AddStop(name, lat, lon);
                 if (value_size < 3) {
                     continue;
                 }
-
+                // Distances must be added after all "Stop" additions.
                 auto& from_stop = distances[std::string(name)];
                 for (int i = 2; i < value_size; ++i) {
 
@@ -73,12 +75,12 @@ QueriesToDataBase(TransportCatalogue& db) {
                 }
                 continue;
             }
-
+        // "Bus" must be added after all "Stop" additions.
             if (key == "Bus") {
-                bool round_trip = 
+                bool round_trip =
                     (tokens[1].find('-') != tokens[1].npos) ?
                     true : false;
-                bool annular_trip = 
+                bool annular_trip =
                     (tokens[1].find('>') != tokens[1].npos) ?
                     true : false;
                 if (!round_trip && !annular_trip) {
@@ -87,7 +89,7 @@ QueriesToDataBase(TransportCatalogue& db) {
                 char delimiter = annular_trip ? '>' : '-';
                 std::vector<std::string> values;
                 Split(tokens[1], delimiter, values, true);
-             
+                // Add to buffer
                 buses[std::string(name)] = {annular_trip,
                                              std::move(values)};
                 continue;
@@ -95,7 +97,7 @@ QueriesToDataBase(TransportCatalogue& db) {
             continue;
         }
 
-
+// Database queries have last priority
         auto pos = line_sv.find(' ');
         if (pos == line_sv.npos) {
             queries.push_back({std::string(line_sv), ""});
@@ -105,10 +107,12 @@ QueriesToDataBase(TransportCatalogue& db) {
                            std::string(Trim(line_sv.substr(pos)))});
     }
 
+// Add Distances to database
     for (auto& [key, stops] : distances) {
-        db.AddStopDistances(key, std::move(stops));
+        db.ToEstablishStopDistances(key, std::move(stops));
     }
 
+// Add "Bus" to database
     for (auto& [key, stops] : buses) {
         db.AddBus(key, stops.first, std::move(stops.second));
     }
@@ -180,5 +184,5 @@ void Split(const std::string_view line, char delimiter,
         tokens.push_back(std::move(token));
     }
 }
-        
+
     }
