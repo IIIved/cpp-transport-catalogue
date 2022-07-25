@@ -32,15 +32,16 @@ public:
 
     explicit RequestHandler(transport_catalogue::TransportCatalogue &db, map_renderer::MapRenderer &renderer);
 
-    struct Bus_Statistic {
-        int stop_count;
-        int route_length;
-        int unique_stop_count;
-        double curvature;
+    struct BusStatistic {
+        int stop_count = 0;
+        int route_length = 0;
+        int unique_stop_count = 0;
+        double curvature = 0.0;
     };
 
-    // Возвращает информацию о маршруте (запрос Bus)
-    std::optional<Bus_Statistic> GetBusStat(const transport_catalogue::Bus &bus) const;
+    // Находит и возвращает информацию о маршруте (запрос Bus)
+    std::optional<RequestHandler::BusStatistic> FindBusStat(const transport_catalogue::Bus &bus) const;
+    std::optional<BusStatistic> GetBusStat(const transport_catalogue::Bus &bus) const;
 
     struct StopStat {
         std::set<std::string> stop_to_buses;

@@ -11,8 +11,8 @@ namespace request_handler {
 
     RequestHandler::RequestHandler(TransportCatalogue &db, map_renderer::MapRenderer &renderer) : db_(db), renderer_(renderer) {}
 
-    std::optional<RequestHandler::Bus_Statistic> RequestHandler::GetBusStat(const transport_catalogue::Bus &bus) const {
-        Bus_Statistic busStat{};
+    std::optional<RequestHandler::BusStatistic> RequestHandler::FindBusStat(const transport_catalogue::Bus &bus) const{
+        BusStatistic busStat{};
 
         if (db_.FindBus(bus.name) == nullptr) {
             return std::nullopt;
@@ -38,6 +38,10 @@ namespace request_handler {
         busStat.curvature = (static_cast<double>(actual_route) / coordinates_route);
 
         return busStat;
+    }
+
+    std::optional<RequestHandler::BusStatistic> RequestHandler::GetBusStat(const transport_catalogue::Bus &bus) const {
+        return FindBusStat(bus);
     }
 
     std::optional<RequestHandler::StopStat> RequestHandler::GetBusesStop(const transport_catalogue::Stop &stop) const {

@@ -12,6 +12,7 @@
 #include <unordered_set>
 #include <deque>
 
+
 namespace transport_catalogue {
 
 namespace detail {
@@ -35,6 +36,7 @@ public:
 
     const Stop *FindStop(std::string_view stop_name);
     const Bus *FindBus(std::string_view bus);
+
     std::set<std::string> FindBusByStop(const std::string &stop_name);
     int FindUniqueStopCount(std::string_view bus);
 

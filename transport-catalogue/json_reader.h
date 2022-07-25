@@ -25,11 +25,13 @@ public:
     json::Document Load(std::istream& input);
     static std::string Print(const json::Node &node);
 
-    void PlaceBasicQueriesInTheTRCatalog(const json::Node& root_);
+    void ParsingBasicQueries(const json::Node& root_);
 
     std::optional<map_renderer::MapRenderer::RenderSettings> ParseRenderSettings(const json::Node& root_);
 
-    json::Array GetStatRequests(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
+    json::Array GetStatRequestsBus(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
+    json::Array GetStatRequestsStop(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
+    json::Array GetStatRequestsMap(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
 
 private:
     transport_catalogue::TransportCatalogue &transportCatalogue_;

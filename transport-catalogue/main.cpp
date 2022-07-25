@@ -16,7 +16,7 @@ int main() {
     json::JsonReader jsonReader(transportCatalogue, mapRenderer);
     json::Node node = jsonReader.Load(cin).GetRoot();
 
-    jsonReader.PlaceBasicQueriesInTheTRCatalog(node);
+    jsonReader.ParsingBasicQueries(node);
 
     std::optional getRenderSettings = jsonReader.ParseRenderSettings(node);
     MapRenderer::RenderSettings renderSettings;
@@ -24,8 +24,13 @@ int main() {
         renderSettings = getRenderSettings.value();
     }
 
-    std::vector<json::Node> arr_stat_req = jsonReader.GetStatRequests(node, renderSettings);
-    std::cout << json::JsonReader::Print(arr_stat_req);
+    //std::vector<json::Node> arr_stat_req_bus = jsonReader.GetStatRequestsBus(node, renderSettings);
+   // std::vector<json::Node> arr_stat_req_stop = jsonReader.GetStatRequestsStop(node, renderSettings);
+    std::vector<json::Node> arr_stat_req_map = jsonReader.GetStatRequestsMap(node, renderSettings);
+
+    //std::cout << json::JsonReader::Print(arr_stat_req_bus);
+    //std::cout << json::JsonReader::Print(arr_stat_req_stop);
+    std::cout << json::JsonReader::Print(arr_stat_req_map);
 
 //    double WIDTH = node.AsMap().at("render_settings").AsMap().at("width").AsDouble();
 //    double HEIGHT = node.AsMap().at("render_settings").AsMap().at("height").AsDouble();
@@ -67,6 +72,8 @@ int main() {
 //            color_plate.push_back(c_p.AsString());
 //        }
 //    }
+
+
 //
 //    //Рисую документ, в котором учитываются все остановки, через которые прошел автобус.
 //    svg::Document doc;

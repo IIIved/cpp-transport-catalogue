@@ -35,7 +35,7 @@ namespace json {
         return out.str();
     }
 
-    void JsonReader::PlaceBasicQueriesInTheTRCatalog(const json::Node &root_) {
+    void JsonReader::ParsingBasicQueries(const json::Node &root_) {
         using type_distance_stop = std::map<std::string, std::vector<std::pair<std::string, int>>>;
         using type_bus_routes = std::map<std::string, std::vector<std::string>>;
 
@@ -102,7 +102,7 @@ namespace json {
         }
     }
 
-    Array JsonReader::GetStatRequests(const Node &root_, const MapRenderer::RenderSettings &renderSettings) {
+    Array JsonReader::GetStatRequestsBus(const Node &root_, const MapRenderer::RenderSettings &renderSettings) {
         Array array_request;
         std::map<std::string, json::Node> data_root_ = root_.AsMap();
         auto stat_requests = data_root_["stat_requests"s];
@@ -116,7 +116,7 @@ namespace json {
                 std::string name = key["name"s].AsString();
                 Bus bus;
                 bus.name = name;
-                std::optional<request_handler::RequestHandler::Bus_Statistic> get_bus_stat = requestHandler_.GetBusStat(
+                std::optional<request_handler::RequestHandler::BusStatistic> get_bus_stat = requestHandler_.GetBusStat(
                         bus);
 
                 if (get_bus_stat != std::nullopt) {
@@ -132,6 +132,20 @@ namespace json {
                     array_request.push_back(dict_node_bus);
                 }
             }
+
+        }
+        return array_request;
+    }
+
+    Array JsonReader::GetStatRequestsStop(const Node &root_, const MapRenderer::RenderSettings &renderSettings) {
+        Array array_request;
+        std::map<std::string, json::Node> data_root_ = root_.AsMap();
+        auto stat_requests = data_root_["stat_requests"s];
+
+        for (const json::Node &stat_req_: stat_requests.AsArray()) {
+            std::map<std::string, json::Node> key = stat_req_.AsMap();
+            int request_id = key["id"s].AsInt();
+            json::Node type = key["type"s];
 
             if (type == "Stop"s) {
                 std::string name = key["name"s].AsString();
@@ -154,6 +168,19 @@ namespace json {
                     array_request.push_back(dict_node_stop);
                 }
             }
+        }
+        return array_request;
+    }
+
+    Array JsonReader::GetStatRequestsMap(const Node &root_, const MapRenderer::RenderSettings &renderSettings) {
+        Array array_request;
+        std::map<std::string, json::Node> data_root_ = root_.AsMap();
+        auto stat_requests = data_root_["stat_requests"s];
+
+        for (const json::Node &stat_req_: stat_requests.AsArray()) {
+            std::map<std::string, json::Node> key = stat_req_.AsMap();
+            int request_id = key["id"s].AsInt();
+            json::Node type = key["type"s];
 
             if (type == "Map"s) {
                 svg::Document doc;
