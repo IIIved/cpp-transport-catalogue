@@ -16,29 +16,40 @@
 
 namespace json {
 
-class JsonReader {
-public:
+    class JsonReader {
+    public:
 
-    explicit JsonReader(transport_catalogue::TransportCatalogue &transportCatalogue, map_renderer::MapRenderer &mapRenderer);
+        explicit JsonReader(transport_catalogue::TransportCatalogue &transportCatalogue, map_renderer::MapRenderer &mapRenderer);
 
-    json::Document LoadJSON(const std::string& s);
-    json::Document Load(std::istream& input);
-    static std::string Print(const json::Node &node);
+        json::Document LoadJSON(const std::string& s);
+        json::Document Load(std::istream& input);
+        static std::string Print(const json::Node &node);
 
-    void ParsingBasicQueries(const json::Node& root_);
+        void ParsingBasicQueries(const json::Node& root_);
 
-    std::optional<map_renderer::MapRenderer::RenderSettings> ParseRenderSettings(const json::Node& root_);
+        std::optional<map_renderer::MapRenderer::RenderSettings> ParseRenderSettings(const json::Node& root_);
+        void GetStatRequestsTypeBus(const json::Node &root_,
+                               const map_renderer::MapRenderer::RenderSettings &renderSettings,
+                               Array &array_request, std::map<std::string, json::Node> key,
+                               int request_id);
+        void GetStatRequestsTypeStop(const json::Node &root_,
+                                const map_renderer::MapRenderer::RenderSettings &renderSettings,
+                                Array &array_request, std::map<std::string, json::Node> key,
+                                int request_id);
+        void GetStatRequestsTypeMap(const json::Node &root_,
+                                                const map_renderer::MapRenderer::RenderSettings &renderSettings,
+                                                Array &array_request, std::map<std::string, json::Node> key,
+                                                int request_id);
+        json::Array
+        GetStatRequests(const json::Node &root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
+        std::optional<map_renderer::MapRenderer::RenderSettings> ParseRenderSettingsColor(const json::Node &root_,std::map<std::string, json::Node> key, svg::Color underlayer_color);
 
-    json::Array GetStatRequestsBus(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
-    json::Array GetStatRequestsStop(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
-    json::Array GetStatRequestsMap(const json::Node& root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
+    private:
+        transport_catalogue::TransportCatalogue &transportCatalogue_;
+        map_renderer::MapRenderer &mapRenderer_;
+        request_handler::RequestHandler requestHandler_;
 
-private:
-    transport_catalogue::TransportCatalogue &transportCatalogue_;
-    map_renderer::MapRenderer &mapRenderer_;
-    request_handler::RequestHandler requestHandler_;
-
-    std::vector<std::pair<std::string, bool>> buses_route;
-};
+        std::vector<std::pair<std::string, bool>> buses_route;
+    };
 
 }//namespace json
