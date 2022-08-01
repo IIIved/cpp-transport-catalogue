@@ -373,6 +373,7 @@ namespace json {
         return false;
     }
 
+
     bool Node::IsArray() const {
         if (holds_alternative<Array>(*this)) {
             return true;
@@ -385,6 +386,10 @@ namespace json {
             return true;
         }
         return false;
+    }
+
+    bool Node::IsDict() const {
+        return std::holds_alternative<Dict>(*this);
     }
 
     bool Node::IsPureDouble() const {
@@ -419,6 +424,8 @@ namespace json {
     bool Document::operator!=(const Document& other) const {
         return root_ != other.root_;
     }
+
+
 
     Document Load(istream& input) {
         return Document{LoadNode(input)};

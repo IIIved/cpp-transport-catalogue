@@ -1,5 +1,5 @@
 #include "json_reader.h"
-
+#include "transport_catalogue.h"
 /*
  * Здесь можно разместить код наполнения транспортного
  * справочника данными из JSON, а также код обработки запросов
@@ -42,10 +42,10 @@ namespace json {
         type_distance_stop distance_stop;
         type_bus_routes bus_routes;
 
-        std::map<std::string, Node> data_root_ = root_.AsMap();
+        std::map<std::string, Node> data_root_ = root_.AsDict();
         json::Node base_req = data_root_["base_requests"s];
         for (const auto &b_r_: base_req.AsArray()) {
-            auto key = b_r_.AsMap();
+            auto key = b_r_.AsDict();
             auto type = key["type"s];
 
             /////////////////STOP
@@ -58,7 +58,7 @@ namespace json {
                     geo::Coordinates coordinates{latitude, longitude};
                     transportCatalogue_.AddStop(name, coordinates);
 
-                    std::map<std::string, Node> road_distances = key["road_distances"s].AsMap();
+                    std::map<std::string, Node> road_distances = key["road_distances"s].AsDict();
                     for (const auto &r_d_: road_distances) {
                         distance_stop[name].push_back({r_d_.first, r_d_.second.AsInt()});
                     }
@@ -101,13 +101,8 @@ namespace json {
             }
         }
     }
-    void JsonReader::GetStatRequestsTypeBus(const json::Node &root_,
-                                            const map_renderer::MapRenderer::RenderSettings &renderSettings,
-                                            Array &array_request, std::map<std::string, json::Node> key,
-                                            int request_id) {
 
-        std::map<std::string, json::Node> data_root_ = root_.AsMap();
-        auto stat_requests = data_root_["stat_requests"s];
+    void JsonReader::GetStatRequestsBus(std::map<std::string,Node> key, int request_id,json::Array array_stat_req ) {
         std::string name = key["name"s].AsString();
         Bus bus;
         bus.name = name;
@@ -119,15 +114,11 @@ namespace json {
                                                 {"route_length"s,      getBusStat->route_length},
                                                 {"stop_count"s,        getBusStat->stop_count},
                                                 {"unique_stop_count"s, getBusStat->unique_stop_count}}};
-            array_request.push_back(dict_node_bus);
+            array_stat_req.push_back(dict_node_bus);
         }
-
     }
 
-    void JsonReader::GetStatRequestsTypeStop(const json::Node &root_,
-                                             const map_renderer::MapRenderer::RenderSettings &renderSettings,
-                                             Array &array_request, std::map<std::string, json::Node> key,
-                                             int request_id) {
+    void JsonReader::GetStatRequestsStop(std::map<std::string,Node> key, int request_id,json::Array array_stat_req ){
         std::string name = key["name"s].AsString();
         Stop stop;
         stop.name = name;
@@ -141,89 +132,69 @@ namespace json {
             }
             json::Node dict_node_stop{json::Dict{{"request_id"s, request_id},
                                                  {"buses"s,      stop_array}}};
-            array_request.push_back(dict_node_stop);
+            array_stat_req.push_back(dict_node_stop);
         }
-
     }
 
-    void JsonReader::GetStatRequestsTypeMap(const json::Node &root_,
-                                            const map_renderer::MapRenderer::RenderSettings &renderSettings,
-                                            Array &array_request, std::map<std::string, json::Node> key,
-                                            int request_id) {
+    void JsonReader::GetStatRequestsMap(const MapRenderer::RenderSettings &renderSettings, int request_id,json::Array array_stat_req ) {
         svg::Document doc;
-        request_handler::RequestHandler::GetCoordinateStops route_inf = requestHandler_.GetStopsWithRoute(
-                buses_route);
-        std::string render_str = requestHandler_.RenderMap(doc, route_inf, renderSettings);
+        auto route_inform = requestHandler_.GetStopsWithRoute(buses_route);
+        std::string render_str = requestHandler_.RenderMap(doc, route_inform, renderSettings);
         json::Node dict_map{json::Dict{{"request_id"s, request_id},
                                        {"map"s,        render_str}}};
-        array_request.push_back(dict_map);
+        array_stat_req.push_back(dict_map);
     }
 
-    json::Array
-    JsonReader::GetStatRequests(const json::Node &root_, const MapRenderer::RenderSettings &renderSettings) {
-        Array array_request;
-        std::map<std::string, json::Node> data_root_ = root_.AsMap();
-        auto stat_requests = data_root_["stat_requests"s];
+    json::Array JsonReader::GetStatRequests(const json::Node& root_, const MapRenderer::RenderSettings &renderSettings) {
+        json::Array array_request;
+        std::map<std::string, Node> data_root_ = root_.AsDict();
+        Node stat_requests = data_root_["stat_requests"s];
 
-        for (const json::Node &stat_req_: stat_requests.AsArray()) {
-            std::map<std::string, json::Node> key = stat_req_.AsMap();
+        for (const Node &s_r_: stat_requests.AsArray()) {
+            std::map<std::string, Node> key = s_r_.AsDict();
             int request_id = key["id"s].AsInt();
-            json::Node type = key["type"s];
+            Node type = key["type"s];
 
             if (type == "Bus"s) {
-                GetStatRequestsTypeBus(root_, renderSettings, array_request, key, request_id);
+                GetStatRequestsBus(key, request_id, array_request);
             } else {
                 json::Node dict_node_bus{json::Dict{{"request_id"s,    request_id},
                                                     {"error_message"s, "not found"s}}};
                 array_request.push_back(dict_node_bus);
             }
 
+
             if (type == "Stop"s) {
-                GetStatRequestsTypeStop(root_, renderSettings, array_request, key, request_id);
-            } else {
-                json::Node dict_node_stop{json::Dict{{"request_id"s,    request_id},
-                                                     {"error_message"s, "not found"s}}};
-                array_request.push_back(dict_node_stop);
+                std::string name = key["name"s].AsString();
+                Stop stop;
+                stop.name = name;
+                auto getStopStat = requestHandler_.GetBusesStop(stop);
+
+                if (getStopStat != std::nullopt) {
+                    GetStatRequestsStop(key, request_id, array_request);
+                } else {
+                    json::Node dict_node_stop{json::Dict{{"request_id"s,    request_id},
+                                                         {"error_message"s, "not found"s}}};
+                    array_request.push_back(dict_node_stop);
+                }
             }
 
             if (type == "Map"s) {
-                GetStatRequestsTypeMap(root_, renderSettings, array_request, key, request_id);
+                GetStatRequestsMap(renderSettings, request_id,array_request );
             }
-
-            return array_request;
-
         }
-
+        return array_request;
     }
-
-    std::optional<MapRenderer::RenderSettings> JsonReader::ParseRenderSettingsColor(const json::Node &root_,std::map<std::string, json::Node> key, svg::Color underlayer_color){
-        std::vector<json::Node> u_c = key["underlayer_color"s].AsArray();
-        if (u_c.size() == 3) {
-            svg::Rgb rgb;
-            rgb.red = u_c[0].AsInt();
-            rgb.green = u_c[1].AsInt();
-            rgb.blue = u_c[2].AsInt();
-            underlayer_color = rgb;
-        } else if (u_c.size() == 4) {
-            svg::Rgba rgba;
-            rgba.red = u_c[0].AsInt();
-            rgba.green = u_c[1].AsInt();
-            rgba.blue = u_c[2].AsInt();
-            rgba.opacity = u_c[3].AsDouble();
-            underlayer_color = rgba;
-        }
-    }
-
 
     std::optional<MapRenderer::RenderSettings> JsonReader::ParseRenderSettings(const json::Node &root_) {
         MapRenderer::RenderSettings renderSettings;
 
-        std::map<std::string, json::Node> data_root_ = root_.AsMap();
-        auto render_settings = data_root_["render_settings"s];
+        std::map<std::string,Node> data_root_ = root_.AsDict();
+        Node render_settings = data_root_["render_settings"s];
         if (render_settings == nullptr) {
             return std::nullopt;
         }
-        std::map<std::string, json::Node> key = render_settings.AsMap();
+        std::map<std::string,Node> key = render_settings.AsDict();
 
         renderSettings.width = key["width"s].AsDouble();
         renderSettings.height = key["height"s].AsDouble();
@@ -232,8 +203,8 @@ namespace json {
         renderSettings.line_width = key["line_width"s].AsDouble();
 
         renderSettings.bus_label_font_size = key["bus_label_font_size"s].AsInt();
-        renderSettings.bus_label_offset.first = key["bus_label_offset"s].AsArray()[0].AsDouble();
-        renderSettings.bus_label_offset.second = key["bus_label_offset"s].AsArray()[1].AsDouble();
+        renderSettings.bus_label_offset.first =  key["bus_label_offset"s].AsArray()[0].AsDouble();
+        renderSettings.bus_label_offset.second =  key["bus_label_offset"s].AsArray()[1].AsDouble();
 
         renderSettings.stop_label_font_size = key["stop_label_font_size"s].AsInt();
         renderSettings.stop_label_offset.first = key["stop_label_offset"s].AsArray()[0].AsDouble();
@@ -241,8 +212,21 @@ namespace json {
 
         svg::Color underlayer_color;
         if (key["underlayer_color"s].IsArray()) {
-            ParseRenderSettingsColor(root_,key, underlayer_color);
-
+            auto u_c = key["underlayer_color"s].AsArray();
+            if (u_c.size() == 3) {
+                svg::Rgb rgb;
+                rgb.red = u_c[0].AsInt();
+                rgb.green = u_c[1].AsInt();
+                rgb.blue = u_c[2].AsInt();
+                underlayer_color = rgb;
+            } else if(u_c.size() == 4) {
+                svg::Rgba rgba;
+                rgba.red = u_c[0].AsInt();
+                rgba.green = u_c[1].AsInt();
+                rgba.blue = u_c[2].AsInt();
+                rgba.opacity = u_c[3].AsDouble();
+                underlayer_color = rgba;
+            }
         } else {
             underlayer_color = key["underlayer_color"s].AsString();
         }
@@ -250,7 +234,7 @@ namespace json {
         renderSettings.underlayer_width = key["underlayer_width"s].AsDouble();
 
         std::vector<svg::Color> color_plate;
-        for (const json::Node &c_p: key["color_palette"s].AsArray()) {
+        for (const Node& c_p : key["color_palette"s].AsArray()) {
             if (c_p.IsArray()) {
                 if (c_p.AsArray().size() == 3) {
                     svg::Rgb rgb;

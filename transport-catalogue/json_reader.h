@@ -28,20 +28,12 @@ namespace json {
         void ParsingBasicQueries(const json::Node& root_);
 
         std::optional<map_renderer::MapRenderer::RenderSettings> ParseRenderSettings(const json::Node& root_);
-        void GetStatRequestsTypeBus(const json::Node &root_,
-                               const map_renderer::MapRenderer::RenderSettings &renderSettings,
-                               Array &array_request, std::map<std::string, json::Node> key,
-                               int request_id);
-        void GetStatRequestsTypeStop(const json::Node &root_,
-                                const map_renderer::MapRenderer::RenderSettings &renderSettings,
-                                Array &array_request, std::map<std::string, json::Node> key,
-                                int request_id);
-        void GetStatRequestsTypeMap(const json::Node &root_,
-                                                const map_renderer::MapRenderer::RenderSettings &renderSettings,
-                                                Array &array_request, std::map<std::string, json::Node> key,
-                                                int request_id);
-        json::Array
-        GetStatRequests(const json::Node &root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
+
+        void GetStatRequestsBus(std::map<std::string,Node> key, int request_id,json::Array array_stat_req );
+        void GetStatRequestsStop(std::map<std::string,Node> key, int request_id,json::Array array_stat_req );
+        void GetStatRequestsMap(const map_renderer::MapRenderer::RenderSettings &renderSettings, int request_id,json::Array array_stat_req );
+
+        json::Array GetStatRequests(const json::Node &root_, const map_renderer::MapRenderer::RenderSettings &renderSettings);
         std::optional<map_renderer::MapRenderer::RenderSettings> ParseRenderSettingsColor(const json::Node &root_,std::map<std::string, json::Node> key, svg::Color underlayer_color);
 
     private:

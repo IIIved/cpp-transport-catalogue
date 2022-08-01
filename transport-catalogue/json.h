@@ -52,7 +52,15 @@ namespace json {
         bool IsArray() const;
         bool IsMap() const;
         bool IsPureDouble() const;
+        bool IsDict() const ;
+        const Dict& AsDict() const {
+            using namespace std::literals;
+            if (!IsDict()) {
+                throw std::logic_error("Not a dict"s);
+            }
 
+            return std::get<Dict>(*this);
+        }
         bool operator==(const Node& other) const;
         bool operator!=(const Node& other) const;
 

@@ -2,6 +2,7 @@
 
 #include "geo.h"
 #include "domain.h"
+#include "json_builder.h"
 
 #include <string>
 #include <string_view>
