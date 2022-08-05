@@ -4,7 +4,7 @@ using namespace json;
 using namespace std::literals;
 
 Node Builder::Build() {
-    if (nodes_stack_.size() != 1 || current_ != phase::FINISH) {
+    if (nodes_stack_.size() != 1 || current_ != stage::FINISH) {
         throw std::logic_error("объект не завершен"s);
     }
     return nodes_stack_.back();
@@ -12,13 +12,13 @@ Node Builder::Build() {
 
 Builder &Builder::EndDict() {
     switch (current_) {
-        case phase::START:
+        case stage::START:
             throw std::logic_error("EndDict не создан"s);
 
-        case phase::PROCESS:
+        case stage::PROCESS:
             if (nodes_stack_.back().IsDict()) {
                 if (nodes_stack_.size() == 1) {
-                    current_ = phase::FINISH;
+                    current_ = stage::FINISH;
                 } else {
                     Dict last_dict = nodes_stack_.back().AsDict();
                     nodes_stack_.pop_back();
@@ -44,9 +44,8 @@ Builder &Builder::EndDict() {
             }
             break;
 
-        case phase::FINISH:
+        case stage::FINISH:
             throw std::logic_error("EndDict - КОНЕЦ"s);
-
     }
 
     return AsAdmin();
@@ -54,13 +53,13 @@ Builder &Builder::EndDict() {
 
 Builder &Builder::EndArray() {
     switch (current_) {
-        case phase::START:
-            throw std::logic_error("EndArray not created"s);
+        case stage::START:
+            throw std::logic_error("EndArray не created"s);
 
-        case phase::PROCESS:
+        case stage::PROCESS:
             if (nodes_stack_.back().IsArray()) {
                 if (nodes_stack_.size() == 1) {
-                    current_ = phase::FINISH;
+                    current_ = stage::FINISH;
                 } else {
                     auto last_arr = nodes_stack_.back().AsArray();
                     nodes_stack_.pop_back();
@@ -87,21 +86,20 @@ Builder &Builder::EndArray() {
             }
             break;
 
-        case phase::FINISH:
+        case stage::FINISH:
             throw std::logic_error("EndArray - КОНЕЦ"s);
     }
-
     return AsAdmin();
 }
 
-Vocabulary& Builder::StartDict() {
+Builder::DictBuilder & Builder::StartDict() {
     switch (current_) {
-        case phase::START:
+        case stage::START:
             nodes_stack_.push_back(Dict{});
-            current_ = phase::PROCESS;
+            current_ = stage::PROCESS;
             break;
 
-        case phase::PROCESS:
+        case stage::PROCESS:
             if (nodes_stack_.back().IsArray() || nodes_stack_.back().IsString()) {
                 nodes_stack_.push_back(Dict{});
             } else {
@@ -109,17 +107,15 @@ Vocabulary& Builder::StartDict() {
             }
             break;
 
-        case phase::FINISH:
+        case stage::FINISH:
             throw std::logic_error("StartDict - КОНЕЦ"s);
-
-
     }
 
-    return *std::make_shared<Vocabulary>(AsAdmin());
+    return *std::make_shared<DictBuilder>(AsAdmin());
 }
 
-KeyBuilder& Builder::Key(const std::string &key) {
-    if (nodes_stack_.back().IsDict() && current_ != phase::FINISH) {
+json::Builder::KeyBuilder& Builder::Key(const std::string &key) {
+    if (nodes_stack_.back().IsDict() && current_ != stage::FINISH) {
         nodes_stack_.emplace_back(key);
     } else {
         throw std::logic_error("Ошибка!"s);
@@ -128,21 +124,21 @@ KeyBuilder& Builder::Key(const std::string &key) {
     return *std::make_shared<KeyBuilder>(AsAdmin());
 }
 
-ArrayBuilder &Builder::StartArray() {
+json::Builder::ArrayBuilder &Builder::StartArray() {
     switch (current_) {
-        case phase::START:
+        case stage::START:
             nodes_stack_.push_back(Array{});
-            current_ = phase::PROCESS;
+            current_ = stage::PROCESS;
             break;
 
-        case phase::PROCESS:
+        case stage::PROCESS:
             if (nodes_stack_.back().IsDict()) {
                 throw std::logic_error("StartArray - неудачный тип возврата"s);
             }
             nodes_stack_.push_back(Array{});
             break;
 
-        case phase::FINISH:
+        case stage::FINISH:
             throw std::logic_error("StartArray - КОНЕЦ"s);
     }
 
@@ -169,7 +165,7 @@ Builder &Builder::Value(const Node &value) {
         if (!first_) {
             nodes_stack_.emplace_back(value);
             first_ = true;
-            current_ = phase::FINISH;
+            current_ = stage::FINISH;
         }
     }
 
