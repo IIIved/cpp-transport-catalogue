@@ -5,7 +5,6 @@
 
 namespace json {
 
-
     class Builder {
     public:
         class DictBuilder;
@@ -98,11 +97,4 @@ namespace json {
         std::vector<Node> nodes_stack_;
         bool first_;
     };
-
-
-
-
-
-
-
 }
