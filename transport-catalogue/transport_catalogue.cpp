@@ -95,3 +95,7 @@ geo::Coordinates TransportCatalogue::GetCoordinatesByStop(std::string_view stop_
     }
     return result;
 }
+
+const std::deque<Stop> TransportCatalogue::GetAllStops() const {
+    return stops_;
+}

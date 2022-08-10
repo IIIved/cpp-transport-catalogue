@@ -6,9 +6,11 @@
 #include <unordered_set>
 #include <vector>
 
-#include  "transport_catalogue.h"
-#include  "map_renderer.h"
-#include  "svg.h"
+#include "transport_catalogue.h"
+#include "transport_router.h"
+#include "map_renderer.h"
+#include "svg.h"
+#include "graph.h"
 
 /*
  * Здесь можно было бы разместить код обработчика запросов к базе, содержащего логику, которую не
@@ -24,30 +26,28 @@
 // Класс RequestHandler играет роль Фасада, упрощающего взаимодействие JSON reader-а
 // с другими подсистемами приложения.
 // См. паттерн проектирования Фасад: https://ru.wikipedia.org/wiki/Фасад_(шаблон_проектирования)
-
 namespace request_handler {
 
     class RequestHandler {
     public:
 
-        explicit RequestHandler(transport_catalogue::TransportCatalogue &db, map_renderer::MapRenderer &renderer);
+        explicit RequestHandler(transport_catalogue::TransportCatalogue &db, renderer::MapRenderer &renderer);
 
-        struct BusStatistic {
-            int stop_count = 0;
-            int route_length = 0;
-            int unique_stop_count = 0;
-            double curvature = 0.0;
+        struct BusStat {
+            int stop_count;
+            int unique_stop_count;
+            int route_length;
+            double curvature;
         };
 
-        // Находит и возвращает информацию о маршруте (запрос Bus)
-        std::optional<RequestHandler::BusStatistic> FindBusStat(const transport_catalogue::Bus &bus) const;
-        std::optional<BusStatistic> GetBusStat(const transport_catalogue::Bus &bus) const;
+        // Возвращает информацию о маршруте (запрос Bus)
+        std::optional<BusStat> GetBusStat(const transport_catalogue::Bus &bus) const;
 
         struct StopStat {
             std::set<std::string> stop_to_buses;
         };
 
-        // Получаю маршруты автобусов, проходящие через остановки.
+        // Возвращает маршруты, проходящие через
         std::optional<StopStat> GetBusesStop(const transport_catalogue::Stop &stop) const;
 
         struct GetCoordinateStops {
@@ -60,12 +60,27 @@ namespace request_handler {
         };
 
         RequestHandler::GetCoordinateStops GetStopsWithRoute(const std::vector<std::pair<std::string, bool>>& stops);
-        std::string RenderMap(svg::Document& doc, const RequestHandler::GetCoordinateStops& get_inform, const map_renderer::MapRenderer::RenderSettings &renderSettings) const;
+        std::string RenderMap(svg::Document& doc, const RequestHandler::GetCoordinateStops& get_inform, const renderer::MapRenderer::RenderSettings &renderSettings) const;
+
+        template <typename Weight>
+        std::optional<transport_router::TransportRouter::ResponseFindRoute> FindRoute(const transport_router::TransportRouter& transportRouter,
+                                                                                      const graph::Router<Weight>& router,
+                                                                                      std::string_view stop_from,
+                                                                                      std::string_view stop_to) const;
 
     private:
         // RequestHandler использует агрегацию объектов "Транспортный Справочник" и "Визуализатор Карты"
         transport_catalogue::TransportCatalogue &db_;
-        map_renderer::MapRenderer &renderer_;
+        renderer::MapRenderer &renderer_;
     };
 
-}// namespace request_handler
+    template<typename Weight>
+    std::optional<transport_router::TransportRouter::ResponseFindRoute>
+    RequestHandler::FindRoute(const transport_router::TransportRouter& transportRouter,
+                              const graph::Router<Weight> &router,
+                              std::string_view stop_from,
+                              std::string_view stop_to) const {
+        return transportRouter.FindRoute(router, stop_from, stop_to);
+    }
+
+}

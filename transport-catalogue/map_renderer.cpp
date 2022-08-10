@@ -3,16 +3,15 @@
 #include <utility>
 
 
-namespace map_renderer {
+using namespace renderer;
 
-    MapRenderer::MapRenderer(RenderSettings renderSettings)
-            : renderSettings_(std::move(renderSettings)) {}
+renderer::MapRenderer::MapRenderer(RenderSettings renderSettings)
+        :  renderSettings_(std::move(renderSettings)) {}
 
-    bool detail::IsZero(double value) {
-        return std::abs(value) < detail::EPSILON;
-    }
+bool detail::IsZero(double value) {
+    return std::abs(value) < detail::EPSILON;
+}
 
-    void MapRenderer::Render(const svg::Document &doc, std::ostream &output) {
-        doc.Render(output);
-    }
-} //namespace map_renderer
+void MapRenderer::Render(const svg::Document& doc, std::ostream& output) {
+    doc.Render(output);
+}

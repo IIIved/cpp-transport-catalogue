@@ -4,31 +4,40 @@
 #include "json_reader.h"
 #include "transport_catalogue.h"
 #include "map_renderer.h"
+#include "transport_router.h"
 
 using namespace std;
 using namespace transport_catalogue;
-using namespace map_renderer;
+using namespace renderer;
+using namespace transport_router;
 
 int main() {
     TransportCatalogue transportCatalogue;
     MapRenderer mapRenderer;
 
     json::JsonReader jsonReader(transportCatalogue, mapRenderer);
-    json::Node node = jsonReader.Load(cin).GetRoot();
+    auto node = jsonReader.Load(cin).GetRoot();
 
-    jsonReader.ParsingBasicQueries(node);
+    jsonReader.PostRequestsInCatalogue(node);
 
     std::optional getRenderSettings = jsonReader.ParseRenderSettings(node);
-    MapRenderer::RenderSettings renderSettings;
+    MapRenderer::RenderSettings render_settings;
     if (getRenderSettings != nullopt) {
-        renderSettings = getRenderSettings.value();
+        render_settings = getRenderSettings.value();
     }
 
-    std::vector<json::Node> arr_stat_req_map = jsonReader.GetStatRequests(node, renderSettings);
+    std::optional getRoutingSettings = jsonReader.routingSettings(node);
+    TransportRouter::RoutingSettings routingSettings{};
+    if (getRoutingSettings != nullopt) {
+        routingSettings = getRoutingSettings.value();
+    }
 
-    std::cout << json::JsonReader::Print(arr_stat_req_map);
-
-//    double WIDTH = node.AsMap().at("render_settings").AsMap().at("width").AsDouble();
+    auto array_stat_req = jsonReader.GetStatRequests(node, render_settings, routingSettings);
+    std::cout << json::JsonReader::Print(array_stat_req);
+    
+    
+    
+    //    double WIDTH = node.AsMap().at("render_settings").AsMap().at("width").AsDouble();
 //    double HEIGHT = node.AsMap().at("render_settings").AsMap().at("height").AsDouble();
 //    double PADDING = node.AsMap().at("render_settings").AsMap().at("padding").AsDouble();
 //

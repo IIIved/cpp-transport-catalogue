@@ -6,7 +6,7 @@
 #include "svg.h"
 #include "geo.h"
 
-namespace map_renderer {
+namespace renderer {
     namespace detail {
         inline const double EPSILON = 1e-6;
         bool IsZero(double value);
@@ -21,9 +21,9 @@ namespace map_renderer {
             double stop_radius = 0.0;
             double line_width = 0.0;
             int bus_label_font_size = 0;
-            std::pair<double, double> bus_label_offset;
+            std::pair<double, double> bus_label_offset = {0.0, 0.0};
             int stop_label_font_size = 0;
-            std::pair<double, double> stop_label_offset;
+            std::pair<double, double> stop_label_offset = {0.0, 0.0};
             svg::Color underlayer_color;
             double underlayer_width = 0.0;
             std::vector<svg::Color> color_palette;
@@ -88,9 +88,9 @@ namespace map_renderer {
         }
 
     private:
-        double padding_ = 0.0;
-        double min_lon_ = 0.0;
-        double max_lat_ = 0.0;
-        double zoom_coeff_ = 0.0;
+        double padding_;
+        double min_lon_ = 0;
+        double max_lat_ = 0;
+        double zoom_coeff_ = 0;
     };
-} //namespace map_renderer
+}
