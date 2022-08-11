@@ -63,10 +63,10 @@ namespace transport_router {
             Stop
         };
 
-        std::string GetItemType(ItemType itemType) const {
-            if (itemType == Bus)
+        std::string GetItemType(ItemType item_type) const {
+            if (item_type == Bus)
                 return "Bus"s;
-            if (itemType == Stop)
+            if (item_type == Stop)
                 return "Stop"s;
             return "failed item type"s;
         }
