@@ -5,6 +5,7 @@
 #include <map>
 #include <set>
 #include <unordered_map>
+#include <memory>
 
 #include "graph.h"
 #include "router.h"
@@ -29,14 +30,14 @@ namespace transport_router {
             int span_count = 0;
         };
 
-        explicit TransportRouter(const TransportRouter::RoutingSettings& routingSettings,
+        explicit TransportRouter(const TransportRouter::RoutingSettings& RoutingSettings,
                                  transport_catalogue::TransportCatalogue& transportCatalogue)
-                : routingSettings_(routingSettings), transportCatalogue_(transportCatalogue) {
+                : RoutingSettings_(RoutingSettings), transportCatalogue_(transportCatalogue) {
         }
 
         void CreateGraph(graph::DirectedWeightedGraph<double>& directedWeightedGraph);
-        std::set<const transport_catalogue::Bus*> AddAllBusRoute();
-        void AddAllVertexStop();
+        std::set<const transport_catalogue::Bus*> FillingTheGraphWithBuses();
+        void FillingTheGraphWithStops();
         void AddEdges(graph::DirectedWeightedGraph<double>& directedWeightedGraph, const GraphInfoStops& graphInfoStops);
 
         struct DataBuild{
@@ -49,18 +50,20 @@ namespace transport_router {
 
         struct ResponseFindRoute {
             double weight_ = 0.0;
-            std::vector<DataBuild> findRoute;
+            std::vector<DataBuild> busnum;
         };
 
-        std::optional<ResponseFindRoute> FindRoute(const graph::Router<double>& router, std::string_view stop_from, std::string_view stop_to) const;
+        std::optional<ResponseFindRoute> FindRoute(std::string_view stop_from, std::string_view stop_to) const;
 
     private:
+
+        std::shared_ptr<graph::Router<double>> router;
         enum ItemType {
             Bus,
             Stop
         };
 
-        std::string getItemType(ItemType itemType) const {
+        std::string GetItemType(ItemType itemType) const {
             if (itemType == Bus)
                 return "Bus"s;
             if (itemType == Stop)
@@ -68,7 +71,7 @@ namespace transport_router {
             return "failed item type"s;
         }
 
-        const RoutingSettings routingSettings_;
+        const RoutingSettings RoutingSettings_;
         transport_catalogue::TransportCatalogue& transportCatalogue_;
 
         std::vector<GraphInfoStops> data_;

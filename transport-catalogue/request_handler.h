@@ -5,6 +5,7 @@
 #include <optional>
 #include <unordered_set>
 #include <vector>
+#include <memory>
 
 #include "transport_catalogue.h"
 #include "transport_router.h"
@@ -64,7 +65,7 @@ namespace request_handler {
 
         template <typename Weight>
         std::optional<transport_router::TransportRouter::ResponseFindRoute> FindRoute(const transport_router::TransportRouter& transportRouter,
-                                                                                      const graph::Router<Weight>& router,
+                                                                                      const graph::Router<Weight> router,
                                                                                       std::string_view stop_from,
                                                                                       std::string_view stop_to) const;
 
@@ -77,10 +78,10 @@ namespace request_handler {
     template<typename Weight>
     std::optional<transport_router::TransportRouter::ResponseFindRoute>
     RequestHandler::FindRoute(const transport_router::TransportRouter& transportRouter,
-                              const graph::Router<Weight> &router,
+                               graph::Router<Weight> router,
                               std::string_view stop_from,
                               std::string_view stop_to) const {
-        return transportRouter.FindRoute(router, stop_from, stop_to);
+        return transportRouter.FindRoute(stop_from, stop_to);
     }
 
 }

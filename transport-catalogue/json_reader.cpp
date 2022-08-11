@@ -191,7 +191,7 @@ namespace json{
                 }
 
                 json::Array items;
-                for (const auto &get_f_r: get_find_route->findRoute) {
+                for (const auto &get_f_r: get_find_route->busnum) {
                     json::Node item_stop{json::Dict{{"stop_name"s, get_f_r.stop_name_},
                                                     {"time"s,      routingSettings.bus_wait_time_},
                                                     {"type"s,      "Wait"s}}};
@@ -220,12 +220,12 @@ namespace json{
 std::optional<MapRenderer::RenderSettings> JsonReader::ParseRenderSettings(const json::Node &root_) {
     MapRenderer::RenderSettings renderSettings;
 
-    auto data_root_ = root_.AsDict();
-    auto render_settings = data_root_["render_settings"s];
+    std::map<std::string, Node> data_root_ = root_.AsDict();
+    Node render_settings = data_root_["render_settings"s];
     if (render_settings == nullptr) {
         return std::nullopt;
     }
-    auto key = render_settings.AsDict();
+    std::map<std::string, Node> key = render_settings.AsDict();
 
     renderSettings.width = key["width"s].AsDouble();
     renderSettings.height = key["height"s].AsDouble();
@@ -243,7 +243,7 @@ std::optional<MapRenderer::RenderSettings> JsonReader::ParseRenderSettings(const
 
     svg::Color underlayer_color;
     if (key["underlayer_color"s].IsArray()) {
-        auto u_c = key["underlayer_color"s].AsArray();
+        std::vector<Node> u_c = key["underlayer_color"s].AsArray();
         if (u_c.size() == 3) {
             svg::Rgb rgb;
             rgb.red = u_c[0].AsInt();
@@ -265,7 +265,7 @@ std::optional<MapRenderer::RenderSettings> JsonReader::ParseRenderSettings(const
     renderSettings.underlayer_width = key["underlayer_width"s].AsDouble();
 
     std::vector<svg::Color> color_plate;
-    for (const auto& c_p : key["color_palette"s].AsArray()) {
+    for (const Node& c_p : key["color_palette"s].AsArray()) {
         if (c_p.IsArray()) {
             if (c_p.AsArray().size() == 3) {
                 svg::Rgb rgb;
@@ -291,13 +291,13 @@ std::optional<MapRenderer::RenderSettings> JsonReader::ParseRenderSettings(const
 }
 
 std::optional<TransportRouter::RoutingSettings> JsonReader::routingSettings(const json::Node &root_) {
-    auto data_root_ = root_.AsDict();
-    auto routing_settings = data_root_["routing_settings"s];
+    std::map<std::string, Node> data_root_ = root_.AsDict();
+    Node routing_settings = data_root_["routing_settings"s];
     if (routing_settings == nullptr) {
         return std::nullopt;
     }
 
-    auto key = routing_settings.AsDict();
+    std::map<std::string, Node> key = routing_settings.AsDict();
     int bus_wait_time = key["bus_wait_time"s].AsInt();
     double bus_velocity = key["bus_velocity"s].AsDouble();
 
