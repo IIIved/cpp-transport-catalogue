@@ -1,0 +1,37 @@
+syntax = "proto3";
+
+package transport_catalogue_proto;
+
+import "map_renderer.proto";
+import "transport_router.proto";
+
+message Coordinates{
+    double lat = 1;
+    double lng = 2;
+}
+
+message Stop{
+    string name = 1;
+    Coordinates coordinates = 2;
+}
+
+message Bus{
+    string name = 1;
+    bool looping = 2;
+    repeated uint32 ind_stops = 3;
+}
+
+message Distance{
+    uint32 from = 1;
+    uint32 to = 2;
+    int32 distance = 3;
+}
+
+message TransportCatalogue {
+    repeated Stop stops = 1;
+    repeated Bus buses = 2;
+    repeated Distance distances = 3;
+    RenderSettings render_settings = 4;
+    BusTimesSettings time_settings = 5;
+    repeated string lol = 6;
+}
