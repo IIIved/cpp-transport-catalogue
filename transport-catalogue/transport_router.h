@@ -1,81 +1,53 @@
 #pragma once
 
-#include <string_view>
-#include <string>
-#include <map>
-#include <set>
-#include <unordered_map>
-#include <memory>
-
-#include "graph.h"
 #include "router.h"
+#include "graph.h"
 #include "transport_catalogue.h"
-#include "domain.h"
+#include "json_reader.h"
 
-namespace transport_router {
-    using namespace std::literals;
+#include <vector>
+#include <string>
+#include <string_view>
+#include <set>
 
-    class TransportRouter {
-    public:
-        struct RoutingSettings {
-            int bus_wait_time_;
-            double bus_velocity_;
-        };
+namespace TransportCatalogue {
 
-        struct GraphInfoStops {
-            std::string_view bus_num;
-            std::string_view stop_from;
-            std::string_view stop_to;
-            double width = 0.0;
-            int span_count = 0;
-        };
+	namespace transport_router {
 
-        explicit TransportRouter(const TransportRouter::RoutingSettings& RoutingSettings,
-                                 transport_catalogue::TransportCatalogue& transportCatalogue)
-                : RoutingSettings_(RoutingSettings), transportCatalogue_(transportCatalogue) {
-        }
+		struct TGraphEdge {
+			graph::EdgeId id;
+			std::string_view from;
+			std::string_view name;
+			size_t span_count_;
+			double weight;
 
-        void CreateGraph(graph::DirectedWeightedGraph<double>& directedWeightedGraph);
-        std::set<const transport_catalogue::Bus*> FillingTheGraphWithBuses();
-        void FillingTheGraphWithStops();
-        void AddEdges(graph::DirectedWeightedGraph<double>& directedWeightedGraph, const GraphInfoStops& graphInfoStops);
+		};
 
-        struct DataBuild{
-            std::string bus_num_;
-            std::string stop_name_;
-            int span_count_ = 0;
-            double time_ = 0.0;
-            std::string type_;
-        };
+		class TransportRouter {
+		public:
+			using BusesAndStops = std::pair<std::set<const Bus*, detail::BusHasher>, std::map<std::string_view, const Stop*>>;
 
-        struct ResponseFindRoute {
-            double weight_ = 0.0;
-            std::vector<DataBuild> busnum;
-        };
+			TransportRouter(const TransportCatalogue& catalogue);
+			void SetSettings(BusTimesSettings&& settings);
+			BusTimesSettings GetSettings() const;
+			void FillGraph();
 
-        std::optional<ResponseFindRoute> FindRoute(std::string_view stop_from, std::string_view stop_to) const;
+			const graph::DirectedWeightedGraph<double>& GetGraph() const;
+			json::Node GetRouteNode(const graph::Router<double>& router, const std::string& from, const std::string& to, int id) const;
 
-    private:
+		private:
+			graph::DirectedWeightedGraph<double> graph_;
+			const TransportCatalogue& catalogue_;
 
-        std::shared_ptr<graph::Router<double>> router;
-        enum ItemType {
-            Bus,
-            Stop
-        };
+			BusTimesSettings settings_;
+			std::vector<TGraphEdge> edges_;
+			std::unordered_map<std::string_view, graph::VertexId> vertexes_;
 
-        std::string GetItemType(ItemType item_type) const {
-            if (item_type == Bus)
-                return "Bus"s;
-            if (item_type == Stop)
-                return "Stop"s;
-            return "failed item type"s;
-        }
+			void FillStopsVertexes(const std::map<std::string_view, const Stop*>& stops);
+			void AddRouteEdge(TGraphEdge&& graph_edge, std::string_view to);
 
-        const RoutingSettings RoutingSettings_;
-        transport_catalogue::TransportCatalogue& transportCatalogue_;
+		};
 
-        std::vector<GraphInfoStops> data_;
-        std::unordered_map<std::string, graph::VertexId> stop_name_vertex_id_;
-    };
+	} //transport_router
 
-}
+} //TransportCatalogue

@@ -1,204 +1,167 @@
 #include "request_handler.h"
+#include "router.h"
 
-#include <sstream>
-#include <algorithm>
-
-using namespace transport_catalogue;
-using namespace request_handler;
 using namespace std::literals;
 
-RequestHandler::RequestHandler(TransportCatalogue &db, renderer::MapRenderer &renderer) : db_(db), renderer_(renderer) {}
+namespace RequestHandler {
 
-std::optional<RequestHandler::BusStat> RequestHandler::GetBusStat(const transport_catalogue::Bus& bus) const {
-    BusStat busStat{};
-
-    if (db_.FindBus(bus.name) == nullptr) {
-        return std::nullopt;
-    }
-
-    int actual_route = 0;
-    double coordinates_route = 0.0;
-    std::string last_stop_name;
-
-    auto bus_num = db_.FindBus(bus.name);
-    for (const auto& stop_name : bus_num->stop_names) {
-        if (!last_stop_name.empty()) {
-            coordinates_route += ComputeDistance(db_.FindStop(last_stop_name)->coordinates, db_.FindStop(stop_name)->coordinates);
-            actual_route += db_.GetCalculateDistance(db_.FindStop(last_stop_name), db_.FindStop(stop_name));
-        }
-        last_stop_name = stop_name;
-    }
-
-    busStat.stop_count = bus_num->stop_names.size();
-    busStat.unique_stop_count = db_.FindUniqueStopCount(bus.name);
-    busStat.route_length = actual_route;
-    busStat.curvature = (static_cast<double>(actual_route) / coordinates_route);
-
-    return busStat;
-}
-
-std::optional<RequestHandler::StopStat> RequestHandler::GetBusesStop(const transport_catalogue::Stop &stop) const {
-    StopStat stopStat{};
-
-    auto get_stop = db_.FindStop(stop.name);
-    if (get_stop == nullptr) {
-        return std::nullopt;
-    }
-
-    auto stop_to_bus = db_.FindBusByStop(stop.name);
-    if (stop_to_bus.empty()) {
-        return stopStat;
-    }
-
-    stopStat.stop_to_buses = stop_to_bus;
-    return stopStat;
-}
-
-RequestHandler::GetCoordinateStops RequestHandler::GetStopsWithRoute(const std::vector<std::pair<std::string, bool>>& buses) {
-    RequestHandler::GetCoordinateStops getCoordinateStops;
-
-    std::map<std::string, std::vector<std::pair<std::string, geo::Coordinates>>> polyline;
-    std::map<std::string, std::vector<std::pair<std::string, geo::Coordinates>>> name_route_inform;
-    std::vector<std::string> sort_bus_name;
-    sort_bus_name.reserve(buses.size());
-
-    for (const auto& stop : buses) {
-        auto bus_num = db_.FindBus(stop.first);
-        if (bus_num == nullptr) {
-            continue;
-        }
-
-        auto first_stop_name = bus_num->stop_names.front();
-        auto get_coord = db_.GetCoordinatesByStop(first_stop_name);
-        name_route_inform[stop.first].push_back({first_stop_name, get_coord});
-
-        if (!stop.second) {
-            if (bus_num->stop_names.back() != bus_num->stop_names[bus_num->stop_names.size() / 2]) {
-                auto last_stop_name = bus_num->stop_names[bus_num->stop_names.size() / 2];
-                get_coord = db_.GetCoordinatesByStop(last_stop_name);
-                name_route_inform[stop.first].push_back({last_stop_name, get_coord});
+    void RequestHandler::FillRequestsToFill(const std::vector<json::Node>& array_) {
+        using namespace json_reader;
+        for (const auto& element_ : array_) {
+            if (element_.AsMap().count("type"s)) {
+                if (element_.AsMap().at("type"s).AsString() == "Stop"s) {
+                    requests_to_fill_.push_front(std::make_unique<RequestStop>(MakeRequestStop(element_.AsMap())));
+                }
+                else if (element_.AsMap().at("type"s).AsString() == "Bus"s) {
+                    requests_to_fill_.push_back(std::make_unique<RequestBus>(MakeRequestBus(element_.AsMap())));
+                }
             }
         }
+    }
 
-        for (const auto& stop_name : bus_num->stop_names) {
-            sort_bus_name.push_back(stop_name);
-            get_coord = db_.GetCoordinatesByStop(stop_name);
-            polyline[stop.first].push_back({stop_name, get_coord});
+    void RequestHandler::FillRequestsToOut(const std::vector<json::Node>& array_) {
+        using namespace json_reader;
+        for (const auto& element_ : array_) {
+            if (element_.AsMap().count("type"s)) {
+                if (element_.AsMap().at("type"s).AsString() == "Bus"s
+                    || element_.AsMap().at("type"s).AsString() == "Stop"s
+                    || element_.AsMap().at("type"s).AsString() == "Map"s) {
+                    requests_to_out_.push_back(std::make_unique<RequestStat>(MakeRequestStat(element_.AsMap())));
+                }
+                else if (element_.AsMap().at("type"s).AsString() == "Route"s) {
+                    requests_to_out_.push_back(std::make_unique<RequestStatRoute>(MakeRequestStatRoute(element_.AsMap())));
+                }
+            }
         }
     }
 
-    std::map<std::string, geo::Coordinates> res;
-    std::vector<geo::Coordinates> coord;
-    coord.reserve(buses.size());
-
-    for (const auto& stop_name : sort_bus_name) {
-        auto get_coord = db_.GetCoordinatesByStop(stop_name);
-        res.insert({stop_name, get_coord});
-        coord.push_back(get_coord);
+    void RequestHandler::FillDocument(std::istream& in_stream) {
+        document_ = json::Load(in_stream);
     }
 
-    getCoordinateStops.polyline = polyline;
-    getCoordinateStops.name_route_inform = name_route_inform;
-    getCoordinateStops.name_coord = res;
-    getCoordinateStops.coordinate = coord;
-
-    return getCoordinateStops;
-}
-
-std::string RequestHandler::RenderMap(svg::Document& doc, const RequestHandler::GetCoordinateStops& get_inform, const renderer::MapRenderer::RenderSettings &renderSettings) const {
-    auto first = get_inform.coordinate.begin();
-    auto end = get_inform.coordinate.end();
-    renderer::SphereProjector sphereProjector(first, end, renderSettings.width, renderSettings.height, renderSettings.padding);
-    size_t cnt_color = 0;
-
-    for (const auto& r_i : get_inform.polyline) {
-        svg::Polyline polyline;
-        for (const auto& stop_geo : r_i.second) {
-            auto points = sphereProjector.operator()(stop_geo.second);
-            polyline.AddPoint(points);
+    void RequestHandler::ReadInput(std::istream& in_stream) {
+        FillDocument(in_stream);
+        for (const auto& [type, value] : document_.GetRoot().AsMap()) {
+            if (type == "base_requests"s) {
+                FillRequestsToFill(value.AsArray());
+            }
+            else if (type == "stat_requests"s) {
+                FillRequestsToOut(value.AsArray());
+            }
+            else if (type == "render_settings"s) {
+                FillRender(value.AsMap());
+            }
+            else if (type == "routing_settings"s) {
+                FillSettingsRouter(value.AsMap());
+            }
+            else if (type == "serialization_settings"s) {
+                FillSettingsSerializator(value.AsMap());
+            }
         }
-        polyline.SetStrokeColor(renderSettings.color_palette[cnt_color % renderSettings.color_palette.size()]);
-        polyline.SetFillColor("none"s);
-        polyline.SetStrokeWidth(renderSettings.line_width);
-        polyline.SetStrokeLineCap(svg::StrokeLineCap::ROUND);
-        polyline.SetStrokeLineJoin(svg::StrokeLineJoin::ROUND);
-
-        doc.Add(polyline);
-        ++cnt_color;
     }
 
-    auto route_inform = get_inform.name_route_inform;
-    cnt_color = 0;
-
-    for (const auto& r_i : route_inform) {
-        for (const auto& stop_geo : r_i.second) {
-            auto points = sphereProjector.operator()(stop_geo.second);
-            svg::Text text_substrate;
-            text_substrate.SetPosition(points);
-            svg::Point point {renderSettings.bus_label_offset.first, renderSettings.bus_label_offset.second};
-            text_substrate.SetOffset(point);
-            text_substrate.SetFontSize(renderSettings.bus_label_font_size);
-            text_substrate.SetFontFamily("Verdana"s);
-            text_substrate.SetFontWeight("bold"s);
-            text_substrate.SetData(r_i.first);
-            // additional properties
-            text_substrate.SetFillColor(renderSettings.underlayer_color);
-            text_substrate.SetStrokeColor(renderSettings.underlayer_color);
-            text_substrate.SetStrokeWidth(renderSettings.underlayer_width);
-            text_substrate.SetStrokeLineCap(svg::StrokeLineCap::ROUND);
-            text_substrate.SetStrokeLineJoin(svg::StrokeLineJoin::ROUND);
-            doc.Add(text_substrate);
-
-            svg::Text text;
-            text.SetPosition(points);
-            text.SetOffset(point);
-            text.SetFontSize(renderSettings.bus_label_font_size);
-            text.SetFontFamily("Verdana"s);
-            text.SetFontWeight("bold"s);
-            text.SetData(r_i.first);
-            text.SetFillColor(renderSettings.color_palette[cnt_color % renderSettings.color_palette.size()]);
-            doc.Add(text);
+    void RequestHandler::SetDistancesInCatalog() {
+        using namespace json_reader;
+        for (const auto& data_ : requests_to_fill_) {
+            if (RequestStop* stop = dynamic_cast<RequestStop*>(data_.get())) {
+                for (const auto& [name2, dist] : stop->distances_) {
+                    catalogue_.SetDistance(stop->name, name2, dist);
+                }
+            }
         }
-        ++cnt_color;
     }
 
-    for (const auto& g_i : get_inform.name_coord) {
-        auto points = sphereProjector.operator()(g_i.second);
-        svg::Circle circle;
-        circle.SetCenter(points);
-        circle.SetRadius(renderSettings.stop_radius);
-        circle.SetFillColor("white"s);
-        doc.Add(circle);
+    void RequestHandler::FillTransportCatalogue() {
+        using namespace json_reader;
+        if (requests_to_fill_.empty()) {
+            return;
+        }
+        for (const auto& data_ : requests_to_fill_) {
+            if (RequestStop* stop = dynamic_cast<RequestStop*>(data_.get())) {
+                catalogue_.AddStop(stop->name, stop->coordinates);
+            }
+            else if (RequestBus* bus = dynamic_cast<RequestBus*>(data_.get())) {
+                catalogue_.AddBus(bus->name, bus->looping, bus->stops_);
+            }
+        }
+        SetDistancesInCatalog();
     }
 
-    for (const auto& g_i : get_inform.name_coord) {
-        auto points = sphereProjector.operator()(g_i.second);
-        svg::Text text_substrate_stop;
-        text_substrate_stop.SetPosition(points);
-        svg::Point point_stop {renderSettings.stop_label_offset.first, renderSettings.stop_label_offset.second};
-        text_substrate_stop.SetOffset(point_stop);
-        text_substrate_stop.SetFontSize(renderSettings.stop_label_font_size);
-        text_substrate_stop.SetFontFamily("Verdana"s);
-        text_substrate_stop.SetData(g_i.first);
-        text_substrate_stop.SetFillColor(renderSettings.underlayer_color);
-        text_substrate_stop.SetStrokeColor(renderSettings.underlayer_color);
-        text_substrate_stop.SetStrokeWidth(renderSettings.underlayer_width);
-        text_substrate_stop.SetStrokeLineCap(svg::StrokeLineCap::ROUND);
-        text_substrate_stop.SetStrokeLineJoin(svg::StrokeLineJoin::ROUND);
-        doc.Add(text_substrate_stop);
-
-        svg::Text text_stop;
-        text_stop.SetPosition(points);
-        text_stop.SetOffset(point_stop);
-        text_stop.SetFontSize(renderSettings.stop_label_font_size);
-        text_stop.SetFontFamily("Verdana"s);
-        text_stop.SetData(g_i.first);
-        text_stop.SetFillColor("black"s);
-        doc.Add(text_stop);
+    void RequestHandler::FillTransportRouter() {
+        router_.FillGraph();
     }
 
-    std::ostringstream out;
-    renderer_.Render(doc, out);
+    void RequestHandler::PrintRequests(std::ostream& out) {
+        using namespace json_reader;
+        bool start_ = false;
+        graph::Router router(router_.GetGraph());
+        out << "["s << std::endl;
+        for (const auto& request_ : requests_to_out_) {
+            if (start_) {
+                out << "," << std::endl;
+            }
+            if (request_->type == "Stop"s) {
+                auto [has_answer, buses] = catalogue_.GetInformationStop(std::string_view((request_->name).value()));
+                json::Node node;
+                if (!has_answer) {
+                    node = MakeNodeForError(request_->id);
+                }
+                else {
+                    node = MakeNodeForStop(request_->id, std::move(buses));
+                }
+                json::Print(json::Document(node), out);
+            }
+            else if (request_->type == "Bus"s) {
+                TransportCatalogue::detail::InformationBus answer = catalogue_.GetInformationBus(std::string_view((request_->name).value()));
+                json::Node node;
+                if (answer == TransportCatalogue::detail::InformationBus{}) {
+                    node = MakeNodeForError(request_->id);
+                }
+                else {
+                    node = MakeNodeForBus(request_->id, std::move(answer));
+                }
+                json::Print(json::Document(node), out);
+            }
+            else if (request_->type == "Map"s) {
+                out << "{\n\"map\": \"";
+                renderer_.SetDateForMap(catalogue_.InfoForMap());
+                renderer_.Render(out);
+                out << "\"," << std::endl << "\"request_id\": "s << request_->id << std::endl << "}";
+            }
+            else if (request_->type == "Route"s) {
+                RequestStatRoute* route = dynamic_cast<RequestStatRoute*>(request_.get());
+                json::Node node = router_.GetRouteNode(router, route->from, route->to, route->id);
+                json::Print(json::Document(node), out);
+            }
+            start_ = true;
+        }
+        out << "\n]"s << std::endl;
+    }
 
-    return out.str();
-}
+    void RequestHandler::FillRender(const std::map<std::string, json::Node>& dic) {
+        using namespace json_reader;
+        renderer_.SetSettings(GetRenderSettingsForMap(dic));
+    }
+
+    void RequestHandler::FillSettingsRouter(const std::map<std::string, json::Node>& dic) {
+        using namespace json_reader;
+        router_.SetSettings(GetRenderSettingsForRouter(dic));
+    }
+
+    void RequestHandler::FillSettingsSerializator(const std::map<std::string, json::Node>& dic) {
+        using namespace json_reader;
+        serializator.SetSerializationSettings(GetSettingsForSerializator(dic));
+    }
+
+    void RequestHandler::SerializeCatalog() {
+        serializator.CatalogueSerialize(catalogue_, router_.GetSettings(), renderer_.GetSettings());
+    }
+
+    void RequestHandler::DeserializeCatalog() {
+        transport_catalogue_proto::TransportCatalogue tcp = serializator.CatalogueDeserialize();
+        serializator.FillCatalogue(catalogue_, tcp);
+        renderer_.SetSettings(serializator.GetRenderSettings(tcp.render_settings()));
+        router_.SetSettings(serializator.GetBusTimesSettings(tcp.time_settings()));
+    }
+
+}//namespace RequestHandler

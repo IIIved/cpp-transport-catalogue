@@ -1,100 +1,84 @@
-#include <utility>
-#include <memory>
+#pragma once
 
 #include "json.h"
+#include <memory>
+#include <utility>
 
 namespace json {
 
     class Builder {
+    private:
+
+        class DictValueContext;
+        class DictItemContext;
+        class ArrayItemContext;
+
+        class BuilderContext {
+        public:
+            BuilderContext(Builder& builder);
+
+            DictItemContext StartDict();
+            ArrayItemContext StartArray();
+            Builder& EndArray();
+            DictValueContext Key(const std::string& key);
+            Builder& EndDict();
+            Builder& GetBuilder();
+
+        private:
+            Builder& builder_;
+        };
+
+        class ArrayItemContext : public BuilderContext {
+        public:
+            ArrayItemContext(Builder& builder);
+
+            ArrayItemContext Value(const json::Node::Value& value);
+            DictValueContext Key(const std::string& key) = delete;
+            Builder& EndDict() = delete;
+
+        };//class ArrayItemContext 
+
+        class DictItemContext : public BuilderContext {
+        public:
+            DictItemContext(Builder& builder);
+
+            DictItemContext StartDict() = delete;
+            ArrayItemContext StartArray() = delete;
+            Builder& EndArray() = delete;
+
+        };//class DictItemContext
+
+        class DictValueContext : public BuilderContext {
+        public:
+            DictValueContext(Builder& builder);
+
+            DictItemContext Value(const Node::Value& value);
+            Builder& EndArray() = delete;
+            DictValueContext Key(const std::string& key) = delete;
+            Builder& EndDict() = delete;
+
+        };//class DictValueContext - âîçâðàùàåòñÿ ïîñëå âûçîâà Key è îæèäàåò ëèáî Value ëèáî íà÷àëî Dict èëè Array
+
     public:
-        class DictBuilder;
-        class ArrayBuilder;
-        class KeyBuilder;
-
-        DictBuilder& StartDict();
+        Builder() = default;
+        Node Build();
+        DictValueContext Key(std::string key);
+        Builder& Value(Node::Value value);
+        DictItemContext StartDict();
         Builder& EndDict();
-
-        ArrayBuilder& StartArray();
+        ArrayItemContext StartArray();
         Builder& EndArray();
 
-        KeyBuilder& Key(const std::string& key);
-        Builder& Value(const Node& value);
-
-        Node Build();
-
-    public:
-        class DictBuilder {
-        public:
-            DictBuilder(Builder& builder) : builder_(builder) {}
-
-            KeyBuilder& Key(const std::string& key) {
-                return builder_.Key(key);
-            }
-
-            Builder& EndDict() {
-                return builder_.EndDict();
-            }
-
-        private:
-            Builder& builder_;
-        };
-
-        class ArrayBuilder {
-        public:
-            ArrayBuilder(Builder& builder) : builder_(builder) {}
-
-            Builder& EndArray() {
-                return builder_.EndArray();
-            }
-
-            ArrayBuilder& Value(const Node& value) {
-                return *std::make_shared<ArrayBuilder>(builder_.Value(value));
-            }
-
-            DictBuilder& StartDict() {
-                return builder_.StartDict();
-            }
-
-            ArrayBuilder& StartArray() {
-                return builder_.StartArray();
-            }
-
-        private:
-            Builder& builder_;
-        };
-
-        class KeyBuilder {
-        public:
-            KeyBuilder(Builder& builder) : builder_(builder) {}
-
-            DictBuilder& StartDict() {
-                return builder_.StartDict();
-            }
-
-            ArrayBuilder& StartArray() {
-                return builder_.StartArray();
-            }
-
-            DictBuilder& Value(const Node& value) {
-                return *std::make_shared<DictBuilder>(builder_.Value(value));
-            }
-
-        private:
-            Builder& builder_;
-        };
-
     private:
-        Builder& AsAdmin() {
-            return static_cast<Builder&>(*this);
-        }
-        enum stage {
-            START,
-            PROCESS,
-            FINISH,
+        enum class Status {
+            EMPTY,
+            IN_WORKING,
+            ENDED
         };
 
-        int current_ = stage::START;
-        std::vector<Node> nodes_stack_;
-        bool first_;
-    };
-}
+        std::vector<std::unique_ptr<Node>> nodes_stack_; 
+        Status status_ = Status::EMPTY; //
+
+    };//class Builder
+
+} //namespace json

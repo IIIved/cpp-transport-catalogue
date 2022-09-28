@@ -1,60 +1,56 @@
 #pragma once
 
+#include <unordered_map>
+#include <string>
+#include <deque>
+#include <string_view>
+#include <set>
+#include <vector>
+#include <utility>
+#include <map>
+
 #include "geo.h"
 #include "domain.h"
 
-#include <string>
-#include <string_view>
-#include <vector>
-#include <map>
-#include <set>
-#include <unordered_map>
-#include <unordered_set>
-#include <deque>
-
-namespace transport_catalogue {
-
-    namespace detail {
-
-        struct pair_hash {
-            template<class T1, class T2>
-            std::size_t operator()(const std::pair<T1, T2> &p) const {
-                auto h1 = std::hash<T1>{}(p.first);
-                auto h2 = std::hash<T2>{}(p.second);
-                return h1 ^ h2;
-            }
-        };
-
-    }
+namespace TransportCatalogue {
 
     class TransportCatalogue {
     public:
-        void AddBusRoute(const Bus &bus);
-        void AddStop(const std::string &stop_name, const geo::Coordinates &coordinates);
-        void AddDistance(const std::string &from, std::string_view to, int distance);
+        using BusesAndStops = std::pair<std::set<const Bus*, detail::BusHasher>, std::map<std::string_view, const Stop*>>;
+        void AddStop(std::string_view name, geo::Coordinates coordinates_);
+        void AddBus(std::string_view name, bool loop, const std::vector<std::string>& stops_buses);
+        void SetDistance(const std::string& from_, const std::string& where_, int distance_);
 
-        const Stop *FindStop(std::string_view stop_name);
-        const Bus *FindBus(std::string_view bus);
-        std::set<std::string> FindBusByStop(const std::string &stop_name);
-        int FindUniqueStopCount(std::string_view bus);
+        const Bus* FindBus(std::string_view name) const;
+        const Stop* FindStop(std::string_view name) const;
 
-        int GetCalculateDistance(const Stop *first_route, const Stop *second_route);
-        geo::Coordinates GetCoordinatesByStop(std::string_view stop_name) const;
+        int GetDistance(const Stop* stop1, const Stop* stop2) const;
+        int GetDistanceInAnyDirection(std::string_view stop1, std::string_view stop2) const;
 
-        const std::deque<Stop> GetAllStops() const;
+        BusesAndStops InfoForMap() const;
+        detail::InformationBus GetInformationBus(std::string_view name) const;
+        std::pair<bool, std::set<std::string>> GetInformationStop(std::string_view name) const;
 
+        const std::deque<Stop>& GetStopsConst() const;
+        const std::deque<Bus>& GetBusesConst() const;
+        const std::unordered_map<std::pair<const Stop*, const Stop*>, int, detail::HasherPairStops>& GetDistancesConst() const;
+        
     private:
+
         std::deque<Stop> stops_;
-        std::unordered_map<std::string_view, const Stop *> get_stops_;
+        std::deque<Bus> buses_;
+      
+        std::unordered_map<std::string_view, const Stop*> names_stops_;
+        std::unordered_map<std::string_view, const Bus*> names_buses_;
+     
+        std::unordered_map<std::string_view, std::set<std::string>> buses_for_stops_; 
+        std::unordered_map<std::pair<const Stop*, const Stop*>, int, detail::HasherPairStops> distances_; 
 
-        std::deque<Bus> buses_to_stop_;
-        std::unordered_map<std::string_view, const Bus *> get_buses_to_stop_;
+        geo::Coordinates GetCoordinates(std::string_view stop) const;
+        double ComputeStraightDistanceBus(std::string_view name) const;
+        int ComputeRealDistanceBus(std::string_view name_bus) const;
+        int GetUniqueStops(const std::vector<std::string>& stops_buses) const;
 
-        using key_distance = std::pair<const Stop *, const Stop *>;
-        std::unordered_map<key_distance, int, detail::pair_hash> distance_between_stop_;
-
-        std::unordered_map<std::string, std::set<std::string>> stop_to_buses_;
-        std::unordered_map<std::string_view, size_t> buses_unique_route_;
     };
 
-}
+}//namespace TransportCatalogue

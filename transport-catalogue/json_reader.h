@@ -1,46 +1,88 @@
 #pragma once
 
-#include <string>
-#include <sstream>
+#include "json.h"
+#include "geo.h"
+#include "transport_catalogue.h"
+#include "map_renderer.h"
+#include "json_builder.h"
+#include "svg.h"
+#include "domain.h"
+#include "serialization.h"
+
+#include <deque>
+#include <string_view>
 #include <optional>
 
-#include "json.h"
-#include "transport_catalogue.h"
-#include "request_handler.h"
-#include "map_renderer.h"
-#include "transport_router.h"
-#include "graph.h"
+namespace json_reader {
 
-namespace json {
+    struct Request {
+        std::string type;
 
-    class JsonReader {
-    public:
-
-        explicit JsonReader(transport_catalogue::TransportCatalogue &transportCatalogue,
-                            renderer::MapRenderer &mapRenderer);
-
-        json::Document LoadJSON(const std::string& s);
-        json::Document Load(std::istream& input);
-        static std::string Print(const json::Node &node);
-
-        void PostRequestsInCatalogue(const json::Node& root_);
-
-        std::optional<renderer::MapRenderer::RenderSettings> ParseRenderSettings(const json::Node& root_);
-        std::optional<transport_router::TransportRouter::RoutingSettings> routingSettings(const json::Node& root_);
-
-        void GetStatRequestsBus(std::map<std::string,json::Node> key, int request_id,json::Array array_request );
-        void GetStatRequestsStop(std::map<std::string,json::Node> key, int request_id,json::Array array_request );
-        void GetStatRequestsMap(const renderer::MapRenderer::RenderSettings &renderSettings, int request_id,json::Array array_request );
-        void GetStatRequestsRoute(std::map<std::string,json::Node> key,json::Array array_request, int request_id,const graph::Router<double>& router,const transport_router::TransportRouter& transportRouter,const transport_router::TransportRouter::RoutingSettings& routingSettings);
-        json::Array GetStatRequests(const json::Node& root_, const renderer::MapRenderer::RenderSettings &renderSettings,
-                                    const transport_router::TransportRouter::RoutingSettings& routingSettings);
-
-    private:
-        transport_catalogue::TransportCatalogue &transportCatalogue_;
-        renderer::MapRenderer &mapRenderer_;
-        request_handler::RequestHandler requestHandler_;
-
-        std::vector<std::pair<std::string, bool>> buses_route;
+        virtual ~Request() = default;
     };
 
-}
+    struct RequestStat : public Request {
+        std::optional<std::string> name;
+        int id = 0;
+    };
+
+    struct RequestStatRoute : public RequestStat {
+        std::string from;
+        std::string to;
+        int id = 0;
+    };
+
+    struct RequestStop : public Request {
+        std::string name;
+        geo::Coordinates coordinates;
+        std::map<std::string, int> distances_;
+    };
+
+    struct RequestBus : public Request {
+        std::string name;
+        bool looping = false;
+        std::vector<std::string> stops_;
+    };
+
+    struct Item {
+        std::string type;
+        double time = 0.0;
+
+        Item(const std::string type_, double time_)
+        : type(type_), time(time_){}
+
+        virtual ~Item() = default;
+    };
+
+    struct ItemWait : public Item {
+        std::string stop_name;
+
+        ItemWait(std::string&& type_, double time_, const std::string& stop_name_)
+        :Item(std::move(type_), time_), stop_name(stop_name_){}
+    };
+
+    struct ItemBus : public Item {
+        std::string bus_name;
+        int span_count = 0;
+
+        ItemBus(std::string&& type_, double time_, const std::string& bus_name_, int span_count_)
+            :Item(std::move(type_), time_), bus_name(bus_name_), span_count(span_count_) {}
+    };
+
+    std::map<std::string, int> MakeMapForStop(const json::Dict& dic);
+    std::vector<std::string> MakeVectorForBus(const json::Array& arr);
+    RequestStop MakeRequestStop(const json::Dict& dic);
+    RequestBus MakeRequestBus(const json::Dict& dic);
+    RequestStat MakeRequestStat(const json::Dict& dic);
+    RequestStatRoute MakeRequestStatRoute(const json::Dict& dic);
+    json::Node MakeNodeForError(int id);
+    json::Node MakeNodeForStop(int id, std::set<std::string>&& buses_);
+    json::Node MakeNodeForRoute(int id, double time, json::Array&& items);
+    json::Node MakeNodeForBus(int id, TransportCatalogue::detail::InformationBus&& inform);
+    svg::Color ColorFromNode(const json::Node& node);
+    RenderSettings GetRenderSettingsForMap(const json::Dict& dic);
+    TransportCatalogue::BusTimesSettings GetRenderSettingsForRouter(const json::Dict& dic);
+    serialization::SerializationSettings GetSettingsForSerializator(const json::Dict& dic);
+    json::Node MakeDictFromItem(Item* item);
+
+}//namespace json_reader  
