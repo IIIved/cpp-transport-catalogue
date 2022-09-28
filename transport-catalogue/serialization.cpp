@@ -85,8 +85,8 @@ namespace serialization {
 			set_proto.add_bus_label_offset(i);
 		}
 		set_proto.set_stop_label_font_size(sett.stop_label_font_size);
-		for (double i : sett.stop_label_offset) {
-			set_proto.add_stop_label_offset(i);
+		for (double proto_iter : sett.stop_label_offset) {
+			set_proto.add_stop_label_offset(proto_iter);
 		}
 		*set_proto.mutable_underlayer_color() = GetFillColorProto(sett.underlayer_color);
 		

@@ -31,7 +31,10 @@ message TransportCatalogue {
     repeated Stop stops = 1;
     repeated Bus buses = 2;
     repeated Distance distances = 3;
-    RenderSettings render_settings = 4;
-    BusTimesSettings time_settings = 5;
-    repeated string lol = 6;
+}
+
+message TransportCatalogueSettings {
+    RenderSettings render_settings = 1;
+    BusTimesSettings time_settings = 2;
+    repeated string lol = 3;
 }
