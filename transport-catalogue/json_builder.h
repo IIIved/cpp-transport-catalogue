@@ -1,84 +1,94 @@
 #pragma once
 
 #include "json.h"
-#include <memory>
-#include <utility>
+
+#include<memory>
+#include <stack>
+#include <string>
+#include <exception>
 
 namespace json {
 
-    class Builder {
-    private:
+	class DictBuilder;
+	class ArrayBuilder;
+	class ValueBuilder;
 
-        class DictValueContext;
-        class DictItemContext;
-        class ArrayItemContext;
+	class Builder {
+	public:
+		Builder() = default;
+		~Builder();
 
-        class BuilderContext {
-        public:
-            BuilderContext(Builder& builder);
+		ValueBuilder Key(const std::string& key);
+		DictBuilder StartDict();
+		ArrayBuilder StartArray();
 
-            DictItemContext StartDict();
-            ArrayItemContext StartArray();
-            Builder& EndArray();
-            DictValueContext Key(const std::string& key);
-            Builder& EndDict();
-            Builder& GetBuilder();
+		Builder& Value(const Data& value);
+		Builder& EndDict();
+		Builder& EndArray();
 
-        private:
-            Builder& builder_;
-        };
+		void Clear();
+		Node Build();
+		bool IsDictKeyTop();
 
-        class ArrayItemContext : public BuilderContext {
-        public:
-            ArrayItemContext(Builder& builder);
+	private:
+		enum class state { START, CHANGE, FINISH };
+		state state_ = state::START;
+		std::stack<std::unique_ptr<Node>> steps_;
+	};
 
-            ArrayItemContext Value(const json::Node::Value& value);
-            DictValueContext Key(const std::string& key) = delete;
-            Builder& EndDict() = delete;
 
-        };//class ArrayItemContext 
+	class ArrayBuilder {
+	public:
+		ArrayBuilder(Builder& builder_)
+			:builder_(builder_) {
 
-        class DictItemContext : public BuilderContext {
-        public:
-            DictItemContext(Builder& builder);
+		}
 
-            DictItemContext StartDict() = delete;
-            ArrayItemContext StartArray() = delete;
-            Builder& EndArray() = delete;
+		ArrayBuilder Value(const Data& value);
 
-        };//class DictItemContext
+		DictBuilder StartDict();
 
-        class DictValueContext : public BuilderContext {
-        public:
-            DictValueContext(Builder& builder);
+		ArrayBuilder StartArray();
 
-            DictItemContext Value(const Node::Value& value);
-            Builder& EndArray() = delete;
-            DictValueContext Key(const std::string& key) = delete;
-            Builder& EndDict() = delete;
+		Builder& EndArray();
 
-        };//class DictValueContext - âîçâðàùàåòñÿ ïîñëå âûçîâà Key è îæèäàåò ëèáî Value ëèáî íà÷àëî Dict èëè Array
+	private:
+		Builder& builder_;
+	};
 
-    public:
-        Builder() = default;
-        Node Build();
-        DictValueContext Key(std::string key);
-        Builder& Value(Node::Value value);
-        DictItemContext StartDict();
-        Builder& EndDict();
-        ArrayItemContext StartArray();
-        Builder& EndArray();
 
-    private:
-        enum class Status {
-            EMPTY,
-            IN_WORKING,
-            ENDED
-        };
+	class DictBuilder {
+	public:
+		DictBuilder(Builder& builder_)
+			:builder_(builder_) {
 
-        std::vector<std::unique_ptr<Node>> nodes_stack_; 
-        Status status_ = Status::EMPTY; //
+		}
 
-    };//class Builder
+		ValueBuilder Key(const std::string& key);
 
-} //namespace json
+		Builder& EndDict();
+
+	private:
+		Builder& builder_;
+	};
+
+
+
+	class ValueBuilder {
+	public:
+		ValueBuilder(Builder& builder_)
+			:builder_(builder_) {
+
+		}
+
+		DictBuilder Value(const Data& value);
+
+		DictBuilder StartDict();
+
+		ArrayBuilder StartArray();
+
+	private:
+		Builder& builder_;
+	};
+
+}

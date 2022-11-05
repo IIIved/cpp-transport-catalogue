@@ -1,40 +1,46 @@
 syntax = "proto3";
 
-package transport_catalogue_proto;
-
 import "map_renderer.proto";
 import "transport_router.proto";
 
-message Coordinates{
-    double lat = 1;
-    double lng = 2;
-}
+package TCProto;
 
-message Stop{
+
+message RoadDistanse {
     string name = 1;
-    Coordinates coordinates = 2;
-}
+    uint32 len = 2;
+};
 
-message Bus{
+message Stop {
     string name = 1;
-    bool looping = 2;
-    repeated uint32 ind_stops = 3;
-}
+    double lat = 2;
+    double lng = 3;
+    repeated string bus_name = 4;
+    repeated RoadDistanse road_distanse = 5;
+   
+};
 
-message Distance{
-    uint32 from = 1;
-    uint32 to = 2;
-    int32 distance = 3;
-}
+message Bus {
+    string name = 1;
+    bool is_roundtrip = 2;
+    uint32 stop_count = 3;
+    uint32 unique_stop_count = 4;
+    double route_length = 5;
+    double curvature = 6;
+    repeated string stops_name = 7;
+};
+
 
 message TransportCatalogue {
-    repeated Stop stops = 1;
-    repeated Bus buses = 2;
-    repeated Distance distances = 3;
-}
+    repeated Stop map_stops = 1;
+    repeated Bus map_buses = 2;
 
-message TransportCatalogueSettings {
-    RenderSettings render_settings = 1;
-    BusTimesSettings time_settings = 2;
-    repeated string lol = 3;
-}
+    string catalogue_map = 3;
+    RenderSettings renderer_settings = 4;
+    
+
+    TransportRouter router = 5;
+    RoutingSettings routing_settings = 6;
+
+};
+

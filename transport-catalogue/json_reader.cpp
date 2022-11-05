@@ -1,177 +1,112 @@
 #include "json_reader.h"
 
+
+#include <iomanip>
+#include <vector>
 #include <iostream>
+#include <cassert>
+#include <sstream>
+#include <string>
 
-using namespace std::literals;
 
-namespace json_reader {
+namespace json::reader {
 
-    std::map<std::string, int> MakeMapForStop(const json::Dict& dic) {
-        std::map<std::string, int> res;
-        for (const auto& elem : dic) {
-            res[elem.first] = elem.second.AsInt();
-        }
-        return res;
-    }
-    std::vector<std::string> MakeVectorForBus(const json::Array& arr) {
-        std::vector<std::string> res;
-        for (const auto& elem : arr) {
-            res.push_back(elem.AsString());
-        }
-        return res;
-    }
+	using namespace std;
 
-    RequestStop MakeRequestStop(const json::Dict& dic) {
-        RequestStop stop;
-        stop.type = "Stop"s;
-        stop.name = dic.at("name"s).AsString();
-        stop.coordinates = { dic.at("latitude"s).AsDouble(), dic.at("longitude"s).AsDouble() };
-        if (dic.count("road_distances"s)) {
-            stop.distances_ = move(MakeMapForStop(dic.at("road_distances"s).AsMap()));
-        }
+	std::vector<std::shared_ptr<Stop>> ParseStop(const json::Array& base_requests) {
+		std::vector<std::shared_ptr<Stop>> result;
+		for (const auto& request : base_requests) {
+			const std::string& type = request.AsMap().at("type"s).AsString();
+			if (type == "Stop"s) {
+				auto stop = std::make_shared<Stop>();
+				stop->Parse(request.AsMap());
+				result.push_back(stop);
+			}
+		}
+		return result;
+	}
 
-        return stop;
-    }
+	std::vector<std::shared_ptr<Bus>> ParseBus(const json::Array& base_requests) {
+		std::vector<std::shared_ptr<Bus>> result;
+		for (const auto& request : base_requests) {
+			const std::string& type = request.AsMap().at("type"s).AsString();
+			if (type == "Bus"s) {
+				auto bus = std::make_shared<Bus>();
+				bus->Parse(request.AsMap());
+				result.push_back(bus);
+			}
+		}
+		return result;
+	}
 
-    RequestBus MakeRequestBus(const json::Dict& dic) {
-        RequestBus bus;
-        bus.type = "Stop"s;
-        bus.name = dic.at("name"s).AsString();
-        bus.stops_ = move(MakeVectorForBus(dic.at("stops"s).AsArray()));
-        bus.looping = dic.at("is_roundtrip"s).AsBool();
-        return bus;
-    }
+	svg::Color ParseColor(const json::Node& node) {
+		if (node.IsString()) {
+			return svg::Color{ node.AsString() };
+		}
+		if (node.IsArray()) {
 
-    RequestStat MakeRequestStat(const json::Dict& dic) {
-        RequestStat res;
-        res.id = dic.at("id"s).AsInt();
-        if (dic.at("type"s).AsString() == "Bus"s) {
-            res.name = dic.at("name"s).AsString();
-            res.type = "Bus"s;
-        }
-        else if (dic.at("type"s).AsString() == "Stop"s) {
-            res.name = dic.at("name"s).AsString();
-            res.type = "Stop"s;
-        }
-        else if (dic.at("type"s).AsString() == "Map"s) {
-            res.type = "Map"s;
-        }
-        return res;
-    }
+			const auto& node_array = node.AsArray();
+			size_t size = node_array.size();
+			if (size == 4) {
+			
+				return svg::Rgba{
+					static_cast<uint8_t>(node_array[0].AsInt()),
+					static_cast<uint8_t>(node_array[1].AsInt()),
+					static_cast<uint8_t>(node_array[2].AsInt()),
+					node_array[3].AsDouble() 
+				};
 
-    RequestStatRoute MakeRequestStatRoute(const json::Dict& dic) {
-        RequestStatRoute res;
-        res.id = dic.at("id"s).AsInt();
-        res.type = "Route"s;
-        res.from = dic.at("from"s).AsString();
-        res.to = dic.at("to"s).AsString();
+			}
+			if (size == 3) {
+				return svg::Rgb{
+					static_cast<uint8_t>(node_array[0].AsInt()),
+					static_cast<uint8_t>(node_array[1].AsInt()),
+					static_cast<uint8_t>(node_array[2].AsInt()) 
+				};
+			}
+		}
+		else {
+			throw  std::logic_error("unknown node");
+		}
+		return svg::Color{};
+	}
 
-        return res;
-    }
+	transport::render::RenderSettings ParseRenderSetting(const json::Dict& render_settings) {
+		transport::render::RenderSettings result;
 
-    json::Node MakeNodeForError(int id) {
-        return json::Builder{}.StartDict()
-            .Key("request_id"s).Value(id)
-            .Key("error_message"s).Value("not found"s)
-            .EndDict().Build();
-    }
+		result.width_ = render_settings.at("width"s).AsDouble();
+		result.height_ = render_settings.at("height"s).AsDouble();
+		result.padding_ = render_settings.at("padding"s).AsDouble();
+		result.stop_radius_ = render_settings.at("stop_radius"s).AsDouble();
+		result.line_width_ = render_settings.at("line_width"s).AsDouble();
+		result.bus_label_font_size_ = render_settings.at("bus_label_font_size"s).AsInt();
+		result.underlayer_width_ = render_settings.at("underlayer_width"s).AsDouble();
+		result.stop_label_font_size_ = render_settings.at("stop_label_font_size"s).AsInt();
 
-    json::Node MakeNodeForRoute(int id, double time, json::Array&& items) {
-        return json::Builder{}.StartDict()
-            .Key("request_id"s).Value(id)
-            .Key("total_time"s).Value(time)
-            .Key("items"s).Value(items)
-            .EndDict().Build();
-    }
+		const json::Array& tmp_bus_label_offset = render_settings.at("bus_label_offset"s).AsArray();	
+		result.bus_label_offset_.x = tmp_bus_label_offset[0].AsDouble();
+		result.bus_label_offset_.y = tmp_bus_label_offset[1].AsDouble();
 
-    json::Node MakeNodeForBus(int id, TransportCatalogue::detail::InformationBus&& inform) {
-        return json::Builder{}.StartDict()
-            .Key("curvature"s).Value(inform.curv)
-            .Key("request_id"s).Value(id)
-            .Key("route_length"s).Value(inform.distance)
-            .Key("stop_count"s).Value(static_cast<int>(inform.static_infom_bus.number_stops))
-            .Key("unique_stop_count"s).Value(static_cast<int>(inform.static_infom_bus.number_stops_un))
-            .EndDict().Build();
-    }
+		const json::Array& tmp_stop_label_offset = render_settings.at("stop_label_offset"s).AsArray();
+		result.stop_label_offset_.x = tmp_stop_label_offset[0].AsDouble();
+		result.stop_label_offset_.y = tmp_stop_label_offset[1].AsDouble();
 
-    json::Node MakeNodeForStop(int id, std::set<std::string>&& buses_) {
-        return json::Builder{}.StartDict()
-            .Key("buses"s).Value(json::Array{ buses_.begin(), buses_.end() })
-            .Key("request_id"s).Value(id)
-            .EndDict().Build();
-    }
+		result.underlayer_color_ = ParseColor(render_settings.at("underlayer_color"s));
 
-    svg::Color ColorFromNode(const json::Node& node) {
-        if (node.IsArray()) {
-            if (node.AsArray().size() == 3) {
-                svg::Rgb rgb;
-                rgb.red = node.AsArray()[0].AsInt();
-                rgb.green = node.AsArray()[1].AsInt();
-                rgb.blue = node.AsArray()[2].AsInt();
-                return rgb;
-            }
-            else {
-                svg::Rgba rgba;
-                rgba.red = node.AsArray()[0].AsInt();
-                rgba.green = node.AsArray()[1].AsInt();
-                rgba.blue = node.AsArray()[2].AsInt();
-                rgba.opacity = node.AsArray()[3].AsDouble();
-                return rgba;
-            }
-        }
-        else {
-            return node.AsString();
-        }
-    }
+		for (const auto& color : render_settings.at("color_palette"s).AsArray()) {
+			result.color_palette_.push_back(ParseColor(color));
+		}
+		return result;
+	}
 
-    RenderSettings GetRenderSettingsForMap(const json::Dict& dic) {
-        RenderSettings res;
-        res.width = dic.at("width"s).AsDouble();
-        res.height = dic.at("height"s).AsDouble();
-        res.padding = dic.at("padding"s).AsDouble();
-        res.line_width = dic.at("line_width"s).AsDouble();
-        res.stop_radius = dic.at("stop_radius"s).AsDouble();
-        res.bus_label_font_size = dic.at("bus_label_font_size"s).AsInt();
-        res.bus_label_offset[0] = dic.at("bus_label_offset"s).AsArray()[0].AsDouble();
-        res.bus_label_offset[1] = dic.at("bus_label_offset"s).AsArray()[1].AsDouble();
-        res.stop_label_font_size = dic.at("stop_label_font_size"s).AsInt();
-        res.stop_label_offset[0] = dic.at("stop_label_offset"s).AsArray()[0].AsDouble();
-        res.stop_label_offset[1] = dic.at("stop_label_offset"s).AsArray()[1].AsDouble();
-        res.underlayer_color = ColorFromNode(dic.at("underlayer_color"s));
-        res.underlayer_width = dic.at("underlayer_width"s).AsDouble();
-        for (const auto& node : dic.at("color_palette"s).AsArray()) {
-            res.color_palette.push_back(ColorFromNode(node));
-        }
-        return res;
-    }
+	RoutingSettings ParseRouterSetting(const json::Dict& router_settings) {
 
-    TransportCatalogue::BusTimesSettings GetRenderSettingsForRouter(const json::Dict& dic) {
-        return { dic.at("bus_wait_time"s).AsDouble(), (dic.at("bus_velocity"s).AsDouble() * 1000.0) / 60.0 };
-    }
+		RoutingSettings result(
+			router_settings.at("bus_wait_time"s).AsInt(),
+			router_settings.at("bus_velocity"s).AsDouble()
+		);
 
-    serialization::SerializationSettings GetSettingsForSerializator(const json::Dict& dic) {
-        return { dic.at("file"s).AsString() };
-    }
+		return result;
+	}
 
-    json::Node MakeDictFromItem(Item* item) {
-        if (item->type == "Wait"s) {
-            ItemWait* route = dynamic_cast<ItemWait*>(item);
-            return json::Builder{}.StartDict()
-                .Key("type"s).Value(route->type)
-                .Key("stop_name"s).Value(route->stop_name)
-                .Key("time"s).Value(route->time)
-                .EndDict().Build();
-        }
-        else if (item->type == "Bus"s) {
-            ItemBus* route = dynamic_cast<ItemBus*>(item);
-            return json::Builder{}.StartDict()
-                .Key("type"s).Value(route->type)
-                .Key("bus"s).Value(route->bus_name)
-                .Key("span_count"s).Value(route->span_count)
-                .Key("time"s).Value(route->time)
-                .EndDict().Build();
-        }
-        return {};
-    }
-
-}//namespace json_reader
+}

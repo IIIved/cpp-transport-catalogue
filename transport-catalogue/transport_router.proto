@@ -1,8 +1,35 @@
 syntax = "proto3";
+import "graph.proto";
 
-package transport_catalogue_proto;
+package TCProto;
 
-message BusTimesSettings{
-	double bus_wait_time = 1;
-	double bus_velocity_m_m = 2;
-}
+message RoutingSettings {
+    double bus_wait_time = 1;
+    double bus_velocity = 2;
+};
+
+message RouteItem {
+    string start_stop = 1;
+    string finish_stop = 2;
+    string bus = 3;
+    int32 stop_count = 4;
+    double trip_time = 5;
+    double wait_time = 6;
+};
+
+message GraphVertexes {
+    string stop_name = 1;
+    int32 index = 2;
+};
+
+
+message TransportRouter {
+
+    GraphProto.DirectedWeightedGraph graph = 1;
+    GraphProto.Router router = 2;
+
+    repeated RouteItem graph_edges = 3;
+    repeated GraphVertexes graph_vertexes = 4;
+    
+};
+

@@ -3,89 +3,88 @@
 #include <iostream>
 #include <map>
 #include <string>
+#include <initializer_list>
 #include <vector>
 #include <variant>
-#include <iomanip>
-#include <cctype>
-#include <utility>
-#include <string_view>
 
 namespace json {
 
-    class Node;
-    using Dict = std::map<std::string, Node>;
-    using Array = std::vector<Node>;
+	class Node;
+	using Dict = std::map<std::string, Node>;
+	using Array = std::vector<Node>;
+	using Data = std::variant<std::nullptr_t, Array, Dict, int, double, bool, std::string >;
 
-    bool IsPrint(char c);
+	class ParsingError : public std::runtime_error {
+	public:
+		using runtime_error::runtime_error;
+	};
 
-    class ParsingError : public std::runtime_error {
-    public:
-        using runtime_error::runtime_error;
-    };
+	class Node {
+	public:
+		Node() = default;
+		Node(std::nullptr_t) {}
+		Node(bool val);
+		Node(int val);
+		Node(double val);
+		Node(std::string val);
+		Node(Array array);
+		Node(Dict map);
 
-    using Node_variant = std::variant<std::nullptr_t, Array, Dict, bool, int, double, std::string>;
+		bool AsBool() const;
+		int AsInt() const;
+		double AsDouble() const;
+		const std::string& AsString() const;
+		const Array& AsArray() const;
+		const Dict& AsMap() const;
 
-    struct NodePrinter;
+		bool IsNull() const;
+		bool IsBool() const;
+		bool IsInt() const;
+		bool IsDouble() const;
+		bool IsPureDouble() const;
+		bool IsString() const;
+		bool IsArray() const;
+		bool IsMap() const;
 
-    class Node final : private Node_variant {
-    public:
-        using variant::variant;
-        using Value = variant;
+		bool operator==(const Node& other) const;
+		bool operator!=(const Node& other) const;
 
-        Node(json::Node::Value& value);
+		void Print(std::ostream& out) const;
 
-        bool IsArray() const;
-        bool IsMap() const;
-        bool IsInt() const;
-        bool IsDouble() const;
-        bool IsString() const;
-        bool IsNull() const;
-        bool IsBool() const;
-        bool IsPureDouble() const;
+	private:
+		Data value_;
 
-        const Array& AsArray() const;
-        const Dict& AsMap() const;
-        int AsInt() const;
-        double AsDouble() const;
-        bool AsBool() const;
-        const std::string& AsString() const;
+		struct Printer {
+			std::ostream& output;
 
-        const Node_variant& GetValue() const;
+			void operator()(std::nullptr_t) const;
+			void operator()(const Array& value) const;
+			void operator()(const Dict& value) const;
+			void operator()(const bool value) const;
+			void operator()(const int value) const;
+			void operator()(const double value) const;
+			void operator()(const std::string_view value) const;
+		};
+	};
 
-        bool operator==(const Node& other) const;
-        bool operator!=(const Node& other) const;
-        Node& operator=(const Node& other) = default;
-    };
+	class Document {
+	public:
+		explicit Document(Node root);
 
-    struct NodePrinter {
-        std::ostream& output;
+		const Node& GetRoot() const;
 
-        void operator()(const Array& roots) const;
-        void operator()(const Dict& roots) const;
-        void operator()(bool root) const;
-        void operator()(int root) const;
-        void operator()(double root) const;
-        void operator()(const std::string& roots) const;
-        void operator()(std::nullptr_t) const;
+		bool operator==(const Document& other) const {
+			return root_ == other.root_;
+		}
+		bool operator!=(const Document& other) const {
+			return root_ != other.root_;
+		}
 
-    };
+	private:
+		Node root_;
+	};
 
-    class Document {
-    public:
-        Document() = default;
-        explicit Document(Node root);
+	Document Load(std::istream& input);
 
-        const Node& GetRoot() const;
-
-    private:
-        Node root_;
-    };
-
-    inline bool operator==(const Document& lhs, const Document& rhs);
-    inline bool operator!=(const Document& lhs, const Document& rhs);
-
-    Document Load(std::istream& input);
-
-    void Print(const Document& doc, std::ostream& output);
-
-}  // namespace json
+	void Print(const Document& doc, std::ostream& output);
+}

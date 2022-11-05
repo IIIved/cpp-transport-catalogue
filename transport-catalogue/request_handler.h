@@ -1,49 +1,58 @@
 #pragma once
 
 #include "json.h"
-#include "geo.h"
+#include "json_builder.h"
 #include "transport_catalogue.h"
-#include "json_reader.h"
-#include "map_renderer.h"
 #include "transport_router.h"
-#include "serialization.h"
 
-#include <deque>
-#include <string_view>
+#include <string>
+#include <vector>
+#include <variant>
 
-namespace RequestHandler {
+namespace transport::response {
 
-    class RequestHandler {
-    public:
-        RequestHandler(TransportCatalogue::TransportCatalogue& catalogue,
-            rendering::MapRenderer& renderer,
-            TransportCatalogue::transport_router::TransportRouter& router)
-            :catalogue_(catalogue), renderer_(renderer), router_(router) {}
+	using namespace transport::catalogue;
+	using namespace transport::router;
+	using namespace std::literals;
 
-        void ReadInput(std::istream& input);
-        void FillTransportCatalogue();
-        void FillTransportRouter();
-        void PrintRequests(std::ostream& out);
-        void SerializeCatalog();
-        void DeserializeCatalog();
+	enum class RequestType
+	{
+		STOP, BUS, MAP, ROUTER
+	};
 
-    private:
-        TransportCatalogue::TransportCatalogue& catalogue_;
-        rendering::MapRenderer& renderer_;
-        TransportCatalogue::transport_router::TransportRouter& router_;
-        serialization::Serializator serializator;
+	struct Request {
+		Request() = default;
 
-        json::Document document_;
-        std::deque<std::unique_ptr<json_reader::Request>> requests_to_fill_;
-        std::deque<std::unique_ptr<json_reader::RequestStat>> requests_to_out_;
+		int id;
+		std::string name = ""s;
+		std::string from = ""s;
+		std::string to = ""s;
+		RequestType type;
+	};
 
-        void FillDocument(std::istream& in_stream);
-        void FillRequestsToFill(const std::vector<json::Node>& array_);
-        void FillRequestsToOut(const std::vector<json::Node>& array_);
-        void FillRender(const std::map<std::string, json::Node>&);
-        void FillSettingsRouter(const std::map<std::string, json::Node>&);
-        void FillSettingsSerializator(const std::map<std::string, json::Node>&);
-        void SetDistancesInCatalog();
-    };
 
-}//namespace RequestHandler
+	class RequestHelper {
+	public:
+		RequestHelper(TransportCatalogue& tc, const json::Array& stat_requests);
+
+		void GetResponses();
+
+		void PrintResponse(std::ostream& out);
+
+	private:
+		TransportCatalogue& catalogue_;
+		std::vector<Request> requests_;
+		json::Array responses_;
+
+		json::Node CreateJsonResponseError(const int request_id);
+
+		json::Node CreateJsonResponseStop(const int request_id, const domains::Stop& data);
+
+		json::Node CreateJsonResponseBus(const int request_id, const domains::Bus data);
+
+		json::Node CreateJsonResponseMap(const int request_id, const std::string map_render_data);
+
+		json::Node CreateJsonResponseRoute(const int request_id, std::shared_ptr<std::vector<RouteItem>> route);
+	};
+
+}

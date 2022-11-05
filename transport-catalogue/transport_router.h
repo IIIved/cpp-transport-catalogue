@@ -1,53 +1,111 @@
 #pragma once
 
+#include "domain.h"
 #include "router.h"
-#include "graph.h"
-#include "transport_catalogue.h"
-#include "json_reader.h"
 
+#include "transport_router.pb.h"
+
+#include <optional>
+#include <iostream>
+#include <iomanip>
+#include <unordered_map>
+#include <ostream>
 #include <vector>
-#include <string>
-#include <string_view>
-#include <set>
+#include <cmath>
+#include <cstdlib>
+#include <algorithm>
+#include <memory>
 
-namespace TransportCatalogue {
 
-	namespace transport_router {
 
-		struct TGraphEdge {
-			graph::EdgeId id;
-			std::string_view from;
-			std::string_view name;
-			size_t span_count_;
-			double weight;
+namespace transport::router {
 
-		};
+    using namespace transport::domains;
 
-		class TransportRouter {
-		public:
-			using BusesAndStops = std::pair<std::set<const Bus*, detail::BusHasher>, std::map<std::string_view, const Stop*>>;
+    using minutes = double;
+    using seconds = double;
 
-			TransportRouter(const TransportCatalogue& catalogue);
-			void SetSettings(BusTimesSettings&& settings);
-			BusTimesSettings GetSettings() const;
-			void FillGraph();
+    using km_ch = double;
+    using m_c = double;
 
-			const graph::DirectedWeightedGraph<double>& GetGraph() const;
-			json::Node GetRouteNode(const graph::Router<double>& router, const std::string& from, const std::string& to, int id) const;
 
-		private:
-			graph::DirectedWeightedGraph<double> graph_;
-			const TransportCatalogue& catalogue_;
+    struct RoutingSettings {
+        RoutingSettings() = default;
+        RoutingSettings(minutes wait_time, km_ch velocity) 
+            : bus_wait_time(wait_time * 60)
+            , bus_velocity(velocity / 3.6)
+        {}
 
-			BusTimesSettings settings_;
-			std::vector<TGraphEdge> edges_;
-			std::unordered_map<std::string_view, graph::VertexId> vertexes_;
+        seconds bus_wait_time;
+        m_c bus_velocity;
+    };
 
-			void FillStopsVertexes(const std::map<std::string_view, const Stop*>& stops);
-			void AddRouteEdge(TGraphEdge&& graph_edge, std::string_view to);
 
-		};
+    struct RouteItem {
+        RouteItem() = default;
+        RouteItem(std::shared_ptr<Stop> start_stop, 
+            std::shared_ptr<Stop> finish_stop, 
+            std::shared_ptr<Bus> new_bus, 
+            int new_trip_stop_count, 
+            seconds new_trip_time, 
+            seconds new_wait_time
+        ) :
+            start_stop_idx(start_stop),
+            finish_stop_idx(finish_stop),
+            bus(new_bus),
+            stop_count(new_trip_stop_count),
+            trip_time(new_trip_time),
+            wait_time(new_wait_time) {
+                
 
-	} //transport_router
+        }
 
-} //TransportCatalogue
+        std::shared_ptr<Stop> start_stop_idx = nullptr;
+        std::shared_ptr<Stop> finish_stop_idx = nullptr;
+        std::shared_ptr<Bus> bus = nullptr;
+        
+        int stop_count = 0;
+        seconds trip_time = 0.0;
+        seconds wait_time = 0.0;
+    };
+
+
+
+    class TransportRouter {
+    public:
+       
+        TransportRouter(
+            std::map<std::string_view, std::shared_ptr<Stop>>& stops,
+            std::map<std::string_view, std::shared_ptr<Bus>>& buses, 
+            RoutingSettings settings);
+
+        void BuildGraph();
+
+        const RoutingSettings& GetSettings() const;
+
+        std::shared_ptr<std::vector<RouteItem>> findRoute(const std::string_view from, const std::string_view to);
+
+
+        void SerializeSettings(TCProto::RoutingSettings& proto);
+        static RoutingSettings DeserializeSettings(const TCProto::RoutingSettings& proto);
+
+
+        void SerializeData(TCProto::TransportRouter& proto) const;
+        void DeserializeData(const TCProto::TransportRouter& proto);
+
+    private:
+        const std::map<std::string_view, std::shared_ptr<Stop>>& stops_;
+        const std::map<std::string_view, std::shared_ptr<Bus>>& buses_;
+        const RoutingSettings settings_;
+
+        graph::DirectedWeightedGraph<double> graph_;
+        std::unique_ptr<graph::Router<double>> search_in_graph_ = nullptr;
+
+        std::vector<RouteItem> graph_edges_;
+        std::unordered_map<std::shared_ptr<Stop>, size_t> graph_vertexes_;
+
+        void FillVertexes();
+        void FillEdges();
+    };
+
+}

@@ -1,81 +1,48 @@
 #pragma once
 
 #include "geo.h"
+#include "json.h"
+
 #include <string>
-#include <iostream>
 #include <string_view>
-#include <utility>
 #include <vector>
+#include <set>
+#include <map>
+#include <memory>
+#include <ostream>
 
-namespace TransportCatalogue {
+namespace transport::domains {
 
-    struct Stop {
+	struct Stop {
+		Stop() = default;
 
-        Stop(std::string_view name, geo::Coordinates coordinates_);
-        Stop(Stop&& other) = default;
+		std::string name;
+		geo::Coordinates coordinates;
+		std::map<std::string, int> road_distanse;
+		std::set<std::string> buses;
 
-        bool operator==(const Stop& other) const;
+		void Parse(const json::Dict& request);
+	};
 
-        std::string name_stop;
-        geo::Coordinates coordinates;
-    };
+	struct Bus {
+		Bus() = default;
 
-    struct BusStaticInformation {
+		std::string name;
 
-        BusStaticInformation() = default;
-        BusStaticInformation(int number, int number_un)
-            :number_stops(number), number_stops_un(number_un) {
-        }
+		bool is_roundtrip;
+		int stop_count = 0;
+		int unique_stop_count = 0;
+		double route_length = 0.0;
+		double curvature = 0.0;
 
-        int number_stops = 0;
-        int number_stops_un = 0;
-    };
+		std::vector<std::string> stops;
 
-    struct Bus {
+		void Parse(const json::Dict& request);
+	};
 
-        Bus(std::string_view name, bool loop, BusStaticInformation inform);
-        Bus(Bus&& other) = default;
 
-        bool operator==(const Bus& other) const;
+	int RealLenBeetwenStops(std::shared_ptr<Stop> from, std::shared_ptr<Stop> to);
 
-        std::vector<std::string_view> stops_for_bus_ = {};
-        std::string name_bus;
-        bool looping;
-        BusStaticInformation static_infom;
-    };
 
-    struct BusTimesSettings {
-        double bus_wait_time_ = 0.0;
-        double bus_velocity_m_m_ = 0.0; //meters per minute
-    };
-
-    namespace detail {
-
-        struct InformationBus {
-
-            InformationBus() = default;
-            InformationBus(BusStaticInformation inform, int di, double curv_)
-                : static_infom_bus(inform), distance(di), curv(curv_) {
-            }
-
-            BusStaticInformation static_infom_bus;
-            int distance = 0;
-            double curv = 0.0;
-        };
-
-        bool operator==(const InformationBus& le, const InformationBus& other);
-
-        std::ostream& operator<<(std::ostream& out, const InformationBus& doc);
-
-        struct HasherPairStops {
-            size_t operator()(const std::pair<const Stop*, const Stop*>& plate) const;
-            std::hash<const void*> hasher;
-        };
-
-        struct BusHasher {
-            bool operator()(const Bus* lhs, const Bus* rhs) const;
-        };
-
-    } //namespace detail
-
-}//namespace TransportCatalogue 
+	
+}

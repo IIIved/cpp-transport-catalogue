@@ -1,167 +1,162 @@
 #include "request_handler.h"
-#include "router.h"
 
-using namespace std::literals;
 
-namespace RequestHandler {
+namespace transport::response {
 
-    void RequestHandler::FillRequestsToFill(const std::vector<json::Node>& array_) {
-        using namespace json_reader;
-        for (const auto& element_ : array_) {
-            if (element_.AsMap().count("type"s)) {
-                if (element_.AsMap().at("type"s).AsString() == "Stop"s) {
-                    requests_to_fill_.push_front(std::make_unique<RequestStop>(MakeRequestStop(element_.AsMap())));
-                }
-                else if (element_.AsMap().at("type"s).AsString() == "Bus"s) {
-                    requests_to_fill_.push_back(std::make_unique<RequestBus>(MakeRequestBus(element_.AsMap())));
-                }
-            }
-        }
-    }
+	using namespace transport::catalogue;
+	using namespace transport::router;
+	using namespace std::literals;
 
-    void RequestHandler::FillRequestsToOut(const std::vector<json::Node>& array_) {
-        using namespace json_reader;
-        for (const auto& element_ : array_) {
-            if (element_.AsMap().count("type"s)) {
-                if (element_.AsMap().at("type"s).AsString() == "Bus"s
-                    || element_.AsMap().at("type"s).AsString() == "Stop"s
-                    || element_.AsMap().at("type"s).AsString() == "Map"s) {
-                    requests_to_out_.push_back(std::make_unique<RequestStat>(MakeRequestStat(element_.AsMap())));
-                }
-                else if (element_.AsMap().at("type"s).AsString() == "Route"s) {
-                    requests_to_out_.push_back(std::make_unique<RequestStatRoute>(MakeRequestStatRoute(element_.AsMap())));
-                }
-            }
-        }
-    }
 
-    void RequestHandler::FillDocument(std::istream& in_stream) {
-        document_ = json::Load(in_stream);
-    }
+	RequestHelper::RequestHelper(TransportCatalogue& tc, const json::Array& stat_requests)
+		: catalogue_(tc)
+	{
+		requests_.reserve(stat_requests.size());
+		for (const json::Node& n : stat_requests) {
+			Request request;
+			const auto &node_map =  n.AsMap();
+			request.id = node_map.at("id"s).AsInt();
 
-    void RequestHandler::ReadInput(std::istream& in_stream) {
-        FillDocument(in_stream);
-        for (const auto& [type, value] : document_.GetRoot().AsMap()) {
-            if (type == "base_requests"s) {
-                FillRequestsToFill(value.AsArray());
-            }
-            else if (type == "stat_requests"s) {
-                FillRequestsToOut(value.AsArray());
-            }
-            else if (type == "render_settings"s) {
-                FillRender(value.AsMap());
-            }
-            else if (type == "routing_settings"s) {
-                FillSettingsRouter(value.AsMap());
-            }
-            else if (type == "serialization_settings"s) {
-                FillSettingsSerializator(value.AsMap());
-            }
-        }
-    }
+			std::string type = node_map.at("type"s).AsString();
+			if (type == "Stop"s) {
+				request.name = node_map.at("name"s).AsString();
+				request.type = RequestType::STOP;
+			}
+			else if (type == "Bus"s) {
+				request.name = node_map.at("name"s).AsString();
+				request.type = RequestType::BUS;
+			}
+			else if (type == "Map"s) {
+				request.type = RequestType::MAP;
+			}
+			else if (type == "Route"s) {
+				request.from = node_map.at("from"s).AsString();
+				request.to = node_map.at("to"s).AsString();
+				request.type = RequestType::ROUTER;
+			}
+			else {
+				throw json::ParsingError("Request invalid"s);
+			}
+			requests_.push_back(request);
+		}
+	}
 
-    void RequestHandler::SetDistancesInCatalog() {
-        using namespace json_reader;
-        for (const auto& data_ : requests_to_fill_) {
-            if (RequestStop* stop = dynamic_cast<RequestStop*>(data_.get())) {
-                for (const auto& [name2, dist] : stop->distances_) {
-                    catalogue_.SetDistance(stop->name, name2, dist);
-                }
-            }
-        }
-    }
+	void RequestHelper::GetResponses() {
+		for (const Request& request : requests_) {
+			switch (request.type) {
+			case RequestType::STOP: {
+				if (auto stop_info = catalogue_.GetStopInfo(request.name); stop_info) {
+					responses_.push_back(CreateJsonResponseStop(request.id, *stop_info));
+				}
+				else {
+					responses_.push_back(CreateJsonResponseError(request.id));
+				}
+			} break;
+			case RequestType::BUS: {
+				if (auto route_info = catalogue_.GetBusInfo(request.name); route_info) {
+					responses_.push_back(CreateJsonResponseBus(request.id, *route_info));
+				}
+				else {
+					responses_.push_back(CreateJsonResponseError(request.id));
+				}
+			} break;
+			case RequestType::MAP: {
+				responses_.push_back(CreateJsonResponseMap(request.id, catalogue_.GetMap()));
+			} break;
+			case RequestType::ROUTER: {
+				if (auto graph_router = catalogue_.findRouteInBase(request.from, request.to); graph_router) {
+					responses_.push_back(CreateJsonResponseRoute(request.id, graph_router).AsMap());
+				}
+				else {
+					responses_.push_back(CreateJsonResponseError(request.id));
+				}
 
-    void RequestHandler::FillTransportCatalogue() {
-        using namespace json_reader;
-        if (requests_to_fill_.empty()) {
-            return;
-        }
-        for (const auto& data_ : requests_to_fill_) {
-            if (RequestStop* stop = dynamic_cast<RequestStop*>(data_.get())) {
-                catalogue_.AddStop(stop->name, stop->coordinates);
-            }
-            else if (RequestBus* bus = dynamic_cast<RequestBus*>(data_.get())) {
-                catalogue_.AddBus(bus->name, bus->looping, bus->stops_);
-            }
-        }
-        SetDistancesInCatalog();
-    }
+			} break;
+			default:
+				throw std::logic_error("unknown type");
+			}
+		}
 
-    void RequestHandler::FillTransportRouter() {
-        router_.FillGraph();
-    }
+	}
 
-    void RequestHandler::PrintRequests(std::ostream& out) {
-        using namespace json_reader;
-        bool start_ = false;
-        graph::Router router(router_.GetGraph());
-        out << "["s << std::endl;
-        for (const auto& request_ : requests_to_out_) {
-            if (start_) {
-                out << "," << std::endl;
-            }
-            if (request_->type == "Stop"s) {
-                auto [has_answer, buses] = catalogue_.GetInformationStop(std::string_view((request_->name).value()));
-                json::Node node;
-                if (!has_answer) {
-                    node = MakeNodeForError(request_->id);
-                }
-                else {
-                    node = MakeNodeForStop(request_->id, std::move(buses));
-                }
-                json::Print(json::Document(node), out);
-            }
-            else if (request_->type == "Bus"s) {
-                TransportCatalogue::detail::InformationBus answer = catalogue_.GetInformationBus(std::string_view((request_->name).value()));
-                json::Node node;
-                if (answer == TransportCatalogue::detail::InformationBus{}) {
-                    node = MakeNodeForError(request_->id);
-                }
-                else {
-                    node = MakeNodeForBus(request_->id, std::move(answer));
-                }
-                json::Print(json::Document(node), out);
-            }
-            else if (request_->type == "Map"s) {
-                out << "{\n\"map\": \"";
-                renderer_.SetDateForMap(catalogue_.InfoForMap());
-                renderer_.Render(out);
-                out << "\"," << std::endl << "\"request_id\": "s << request_->id << std::endl << "}";
-            }
-            else if (request_->type == "Route"s) {
-                RequestStatRoute* route = dynamic_cast<RequestStatRoute*>(request_.get());
-                json::Node node = router_.GetRouteNode(router, route->from, route->to, route->id);
-                json::Print(json::Document(node), out);
-            }
-            start_ = true;
-        }
-        out << "\n]"s << std::endl;
-    }
 
-    void RequestHandler::FillRender(const std::map<std::string, json::Node>& dic) {
-        using namespace json_reader;
-        renderer_.SetSettings(GetRenderSettingsForMap(dic));
-    }
+	void RequestHelper::PrintResponse(std::ostream& out) {
+		json::Print(json::Document{ responses_ }, out);
+	}
 
-    void RequestHandler::FillSettingsRouter(const std::map<std::string, json::Node>& dic) {
-        using namespace json_reader;
-        router_.SetSettings(GetRenderSettingsForRouter(dic));
-    }
+	json::Node RequestHelper::CreateJsonResponseError(const int request_id) {
+		return json::Builder{}.
+			StartDict().
+			Key("request_id"s).Value(request_id).
+			Key("error_message"s).Value("not found"s).
+			EndDict().
+			Build();
+	}
 
-    void RequestHandler::FillSettingsSerializator(const std::map<std::string, json::Node>& dic) {
-        using namespace json_reader;
-        serializator.SetSerializationSettings(GetSettingsForSerializator(dic));
-    }
 
-    void RequestHandler::SerializeCatalog() {
-        serializator.CatalogueSerialize(catalogue_, router_.GetSettings(), renderer_.GetSettings());
-    }
+	json::Node RequestHelper::CreateJsonResponseStop(const int request_id, const domains::Stop& data) {
+		json::Builder builder;
+		builder.StartArray();
+		for (auto& bus : data.buses) {
+			builder.Value(bus);
+		}
+		json::Node tmp = builder.EndArray().Build();
+		return json::Builder{}.
+			StartDict().
+			Key("request_id"s).Value(request_id).
+			Key("buses").Value(tmp.AsArray()).
+			EndDict().
+			Build();
+	}
 
-    void RequestHandler::DeserializeCatalog() {
-        transport_catalogue_proto::TransportCatalogue tcp = serializator.CatalogueDeserialize();
-        serializator.FillCatalogue(catalogue_, tcp);
-        renderer_.SetSettings(serializator.GetRenderSettings(tcp.render_settings()));
-        router_.SetSettings(serializator.GetBusTimesSettings(tcp.time_settings()));
-    }
+	json::Node RequestHelper::CreateJsonResponseBus(const int request_id, const domains::Bus data) {
+		return json::Builder{}.
+			StartDict().
+			Key("request_id"s).Value(request_id).
+			Key("route_length"s).Value(data.route_length).
+			Key("stop_count"s).Value(data.stop_count).
+			Key("unique_stop_count"s).Value(data.unique_stop_count).
+			Key("curvature"s).Value(data.curvature).
+			EndDict().
+			Build();
+	}
 
-}//namespace RequestHandler
+	json::Node RequestHelper::CreateJsonResponseMap(const int request_id, const std::string map_render_data) {
+		return json::Builder{}.
+			StartDict().
+			Key("map"s).Value(map_render_data).
+			Key("request_id"s).Value(request_id).
+			EndDict().
+			Build();
+	}
+
+	json::Node RequestHelper::CreateJsonResponseRoute(const int request_id, std::shared_ptr<std::vector<RouteItem>> route) {
+
+		json::Builder builder_;
+		builder_.StartArray();
+		double total_time = 0.0;
+		for (auto it = route->begin(); it != route->end(); it++) {
+			total_time += (it->wait_time + it->trip_time);
+			builder_.StartDict()
+				.Key("type"s).Value("Wait"s)
+				.Key("stop_name"s).Value(it->start_stop_idx->name)
+				.Key("time"s).Value(it->wait_time / 60)
+				.EndDict()
+
+				.StartDict()
+				.Key("type"s).Value("Bus"s)
+				.Key("bus"s).Value(it->bus->name)
+				.Key("span_count"s).Value(it->stop_count)
+				.Key("time"s).Value(it->trip_time / 60)
+				.EndDict();
+		}
+		json::Node x = builder_.EndArray().Build();
+
+		return json::Builder{}
+			.StartDict()
+			.Key("request_id"s).Value(request_id)
+			.Key("total_time"s).Value(total_time / 60)
+			.Key("items"s).Value(x.AsArray())
+			.EndDict().Build();
+	}
+}

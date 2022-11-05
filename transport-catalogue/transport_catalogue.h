@@ -1,56 +1,71 @@
 #pragma once
+#include "geo.h"
+#include "json.h"
+#include "domain.h"
+#include "map_renderer.h"
+#include "transport_router.h"
 
-#include <unordered_map>
+
 #include <string>
 #include <deque>
-#include <string_view>
-#include <set>
 #include <vector>
-#include <utility>
+#include <unordered_set>
+#include <math.h>
+#include <list>
+#include <algorithm>
 #include <map>
+#include <unordered_map>
+#include <set>
+#include <memory>
+#include <optional>
+#include <string>
+#include <utility>
 
-#include "geo.h"
-#include "domain.h"
+namespace transport::catalogue {
 
-namespace TransportCatalogue {
+	using namespace transport::domains;
+	using namespace transport::render;
+	using namespace transport::router;
 
-    class TransportCatalogue {
-    public:
-        using BusesAndStops = std::pair<std::set<const Bus*, detail::BusHasher>, std::map<std::string_view, const Stop*>>;
-        void AddStop(std::string_view name, geo::Coordinates coordinates_);
-        void AddBus(std::string_view name, bool loop, const std::vector<std::string>& stops_buses);
-        void SetDistance(const std::string& from_, const std::string& where_, int distance_);
 
-        const Bus* FindBus(std::string_view name) const;
-        const Stop* FindStop(std::string_view name) const;
+	class TransportCatalogue {
+	public:
 
-        int GetDistance(const Stop* stop1, const Stop* stop2) const;
-        int GetDistanceInAnyDirection(std::string_view stop1, std::string_view stop2) const;
+		TransportCatalogue() = default;
 
-        BusesAndStops InfoForMap() const;
-        detail::InformationBus GetInformationBus(std::string_view name) const;
-        std::pair<bool, std::set<std::string>> GetInformationStop(std::string_view name) const;
+		TransportCatalogue(
+			std::vector<std::shared_ptr<Stop>>& stops,
+			std::vector<std::shared_ptr<Bus>>& buses,
+			RenderSettings render_settings,
+			RoutingSettings router_settings
+		);
 
-        const std::deque<Stop>& GetStopsConst() const;
-        const std::deque<Bus>& GetBusesConst() const;
-        const std::unordered_map<std::pair<const Stop*, const Stop*>, int, detail::HasherPairStops>& GetDistancesConst() const;
-        
-    private:
 
-        std::deque<Stop> stops_;
-        std::deque<Bus> buses_;
-      
-        std::unordered_map<std::string_view, const Stop*> names_stops_;
-        std::unordered_map<std::string_view, const Bus*> names_buses_;
-     
-        std::unordered_map<std::string_view, std::set<std::string>> buses_for_stops_; 
-        std::unordered_map<std::pair<const Stop*, const Stop*>, int, detail::HasherPairStops> distances_; 
+		~TransportCatalogue() {}
 
-        geo::Coordinates GetCoordinates(std::string_view stop) const;
-        double ComputeStraightDistanceBus(std::string_view name) const;
-        int ComputeRealDistanceBus(std::string_view name_bus) const;
-        int GetUniqueStops(const std::vector<std::string>& stops_buses) const;
+		std::optional<Stop> GetStopInfo(std::string_view stop_name);
 
-    };
+		std::optional<Bus> GetBusInfo(std::string_view bus_name);
+		
+		std::shared_ptr<Stop> StopByName(std::string_view name); 
+		std::shared_ptr<Bus> BusByName(std::string_view name);
 
-}//namespace TransportCatalogue
+		const std::string& GetMap();
+
+		std::shared_ptr<std::vector<RouteItem>> findRouteInBase(std::string_view from, std::string_view to);
+
+
+		std::string Serialize() const;
+		void Deserialize(const std::string& data);
+
+	private:
+		std::map<std::string_view, std::shared_ptr<Stop>> stops_;
+		std::map<std::string_view, std::shared_ptr<Bus>> buses_;
+
+		std::unique_ptr<MapRenderer> render_;
+		std::unique_ptr<TransportRouter>router_;
+
+		std::string map_;
+	};
+
+}

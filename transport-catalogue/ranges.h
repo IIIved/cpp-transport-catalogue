@@ -33,4 +33,4 @@ namespace ranges {
         return Range{ container.begin(), container.end() };
     }
 
-}  // namespace ranges
+}

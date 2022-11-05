@@ -1,194 +1,239 @@
 #include "json_builder.h"
 
-using namespace std::literals;
-
 namespace json {
 
-    json::Node Builder::Build() {
-        if (status_ == Status::ENDED) {
-            return *(nodes_stack_.back());
+    Builder::~Builder() {
+        Clear();
+    }
+
+    bool Builder::IsDictKeyTop() {
+        return (steps_.size() > 1) && steps_.top()->IsString();
+    }
+
+    void Builder::Clear() {
+        while (!steps_.empty()) {
+            steps_.pop();
+        }
+        state_ = state::START;
+    }
+
+    Node Builder::Build() {
+        if (state_ == state::FINISH) {
+            return *steps_.top();
         }
         else {
-            throw std::logic_error("Unable to build a node. Status is not ENDED."s);
+            throw std::logic_error("building of unready node");
         }
     }
 
-    Builder::DictValueContext Builder::Key(std::string key) {
-        switch (status_) {
-        case Status::EMPTY:
-        case Status::ENDED:
-            throw std::logic_error("Couldn't create a key. Status is not IN_WORKING."s);
+    ValueBuilder Builder::Key(const std::string& key) {
+        switch (state_) {
+        case state::START:
+            throw std::logic_error("empty node key add attempt");
             break;
-        case Status::IN_WORKING:
-            nodes_stack_.push_back(std::make_unique<Node>(key));
+        case state::CHANGE: {
+            if (steps_.top().get()->IsMap()) {
+                steps_.push(std::make_unique<Node>(key));
+            }
+            else {
+                throw std::logic_error(IsDictKeyTop() ? "dict key entered twice" : "not dict node key add attempt");
+            }
+        }
+                          break;
+        case state::FINISH:
+            throw std::logic_error("ready node key add attempt");
             break;
         default:
-            throw std::logic_error("Unknown error"s);
+            throw std::logic_error("dict key common error");
         }
-        return DictValueContext(*this);
+
+        return ValueBuilder(*this);
     }
 
-    Builder& Builder::Value(json::Node::Value value) {
-        switch (status_) {
-        case Status::EMPTY:
-        {
-            nodes_stack_.push_back(std::make_unique<Node>(value));
-            status_ = Status::ENDED;
+    DictBuilder Builder::StartDict() {
+        switch (state_) {
+        case state::START:
+            state_ = state::CHANGE;
+            steps_.push(std::make_unique<Node>(Dict()));
             break;
-        }
-        case Status::IN_WORKING:
-        {
-            if (nodes_stack_.back()->IsArray()) {
-                json::Array arr = nodes_stack_.back()->AsArray();
-                arr.emplace_back(value);
-                *(nodes_stack_.back()) = Node(std::move(arr));
-                break;
+        case state::CHANGE:
+            if (!steps_.top().get()->IsMap()) {
+                steps_.push(std::make_unique<Node>(Dict()));
             }
-            else if (nodes_stack_.back()->IsString()) {
-                std::string key = nodes_stack_.back()->AsString();
-                nodes_stack_.pop_back();
-                json::Dict dict = nodes_stack_.back()->AsMap();
-                dict.insert({ key, value });
-                *(nodes_stack_.back()) = Node(std::move(dict));
-                break;
+            else {
+                throw std::logic_error("start dict in another dict error");
             }
             break;
-        }
-        case Status::ENDED:
-            throw std::logic_error("Couldn't create a value. Status: ENDED."s);
+        case state::FINISH:
+            throw std::logic_error("ready node start dict attempt");
             break;
         default:
-            throw std::logic_error("Unknown error"s);
+            throw std::logic_error("start dict common error");
+        }
+
+        return DictBuilder(*this);
+    }
+    ArrayBuilder Builder::StartArray() {
+        switch (state_) {
+        case state::START:
+            state_ = state::CHANGE;
+            steps_.push(std::make_unique<Node>(Array()));
+            break;
+        case state::CHANGE: {
+            if (steps_.top().get()->IsMap()) {
+                throw std::logic_error("start array error. enter a dict key first");
+            }
+            steps_.push(std::make_unique<Node>(Array()));
+        }
+                          break;
+        case state::FINISH:
+            throw std::logic_error("ready node start array attempt");
+            break;
+        default:
+            throw std::logic_error("start array error");
+        }
+        return ArrayBuilder(*this);
+    }
+
+    Builder& Builder::Value(const Data& value) {
+        switch (state_) {
+        case state::START: {
+            steps_.push(std::make_unique<Node>(
+                std::visit([](auto& value) {
+                    return Node(value);
+                    }, value)
+                )
+            );
+            state_ = state::FINISH;
+        }
+                         break;
+        case state::CHANGE: {
+            if (steps_.top()->IsArray()) {
+                json::Array tmp = std::move(steps_.top()->AsArray());
+                tmp.emplace_back(
+                    std::visit([](auto& value) {
+                        return Node(value);
+                        }, value)
+                );
+                *steps_.top() = Node(std::move(tmp));
+            }
+            else if (IsDictKeyTop()) {
+                std::string key = std::move(steps_.top()->AsString());
+                steps_.pop();
+                json::Dict dict = std::move(steps_.top().get()->AsMap());
+                dict.insert({ key, std::visit([](auto& value) {
+                    return Node(value);
+                    }, value) });
+                *steps_.top() = Node(std::move(dict));
+            }
+            else {
+                throw std::logic_error("dict value without key add attempt");
+            }
+        } break;
+        case state::FINISH:
+            throw std::logic_error("ready node value add attempt");
+            break;
+        default:
+            throw std::logic_error("value common error");
         }
         return *this;
-    }
-
-    Builder::DictItemContext Builder::StartDict() {
-        switch (status_) {
-        case Status::ENDED:
-            throw std::logic_error("Couldn't create a Dict. Status ENDED."s);
-            break;
-        case Status::EMPTY:
-        case Status::IN_WORKING:
-            nodes_stack_.push_back(std::make_unique<Node>(Dict()));
-            status_ = Status::IN_WORKING;
-            break;
-        default:
-            throw std::logic_error("Unknown error"s);
-        }
-        return Builder::DictItemContext(*this);
     }
 
     Builder& Builder::EndDict() {
-        switch (status_) {
-        case Status::EMPTY:
-        case Status::ENDED:
-            throw std::logic_error("Couldn't end a Dict. Status is not IN_WORKING"s);
+        switch (state_) {
+        case state::START:
+            throw std::logic_error("empty node end dict attempt");
             break;
-        case Status::IN_WORKING:
-        {
-            if (nodes_stack_.size() == 1) {
-                status_ = Status::ENDED;
+        case state::CHANGE: {
+            if (steps_.top().get()->IsMap()) {
+                if (steps_.size() == 1) {
+                    state_ = state::FINISH;
+                }
+                else {
+                    json::Dict value = std::move(steps_.top().get()->AsMap());
+                    steps_.pop();
+                    Value(value);
+                }
             }
             else {
-                json::Dict value = nodes_stack_.back()->AsMap();
-                nodes_stack_.pop_back();
-                Value(std::move(value));
+                throw std::logic_error(steps_.top()->IsString() ? "dict value expected" : "it is not a dict");
             }
+        } break;
+        case state::FINISH:
+            throw std::logic_error("ready node end dict attempt");
             break;
-        }
         default:
-            throw std::logic_error("Unknown error"s);
+            throw std::logic_error("end dict common error");
         }
         return *this;
-    }
-
-    Builder::ArrayItemContext Builder::StartArray() {
-        switch (status_) {
-        case Status::EMPTY:
-        {
-            nodes_stack_.push_back(std::make_unique<Node>(Array()));
-            status_ = Status::IN_WORKING;
-            break;
-        }
-        case Status::IN_WORKING:
-        {
-            nodes_stack_.push_back(std::make_unique<Node>(Array()));
-            break;
-        }
-        case Status::ENDED:
-            throw std::logic_error("Couldn't create a Array. Status: ENDED."s);
-            break;
-        default:
-            throw std::logic_error("Unknown error"s);
-        }
-        return ArrayItemContext(*this);
     }
 
     Builder& Builder::EndArray() {
-        switch (status_) {
-        case Status::EMPTY:
-        case Status::ENDED:
-            throw std::logic_error("Couldn't end a Array. Status is not IN_WORKING."s);
+        switch (state_) {
+        case state::START:
+            throw std::logic_error("empty node end array attempt");
             break;
-        case Status::IN_WORKING:
-        {
-            if (nodes_stack_.size() == 1) {
-                status_ = Status::ENDED;
+        case state::CHANGE: {
+            if (steps_.top()->IsArray()) {
+                if (steps_.size() == 1) {
+                    state_ = state::FINISH;
+                }
+                else {
+                    json::Array value = std::move(steps_.top()->AsArray());
+                    steps_.pop();
+                    Value(value);
+                }
             }
             else {
-                json::Array value = nodes_stack_.back()->AsArray();
-                nodes_stack_.pop_back();
-                Value(std::move(value));
+                throw std::logic_error("non-array node end array attempt");
             }
+        } break;
+        case state::FINISH:
+            throw std::logic_error("ready node end array attempt");
             break;
-        }
         default:
-            throw std::logic_error("Unknown error"s);
+            throw std::logic_error("end aray common error");
         }
         return *this;
     }
 
-    Builder::BuilderContext::BuilderContext(Builder& builder)
-        : builder_(builder) {}
 
-    Builder& Builder::BuilderContext::GetBuilder() {
-        return builder_;
+    ArrayBuilder ArrayBuilder::Value(const Data& value) {
+        return ArrayBuilder(builder_.Value(value));
     }
 
-    Builder::DictItemContext Builder::BuilderContext::StartDict() {
+    DictBuilder ArrayBuilder::StartDict() {
         return builder_.StartDict();
     }
 
-    Builder::ArrayItemContext Builder::BuilderContext::StartArray() {
+    ArrayBuilder ArrayBuilder::StartArray() {
         return builder_.StartArray();
     }
 
-    Builder& Builder::BuilderContext::EndArray() {
+    Builder& ArrayBuilder::EndArray() {
         return builder_.EndArray();
     }
-    Builder::DictValueContext Builder::BuilderContext::Key(const std::string& key) {
+
+
+    ValueBuilder DictBuilder::Key(const std::string& key) {
         return builder_.Key(key);
     }
-    Builder& Builder::BuilderContext::EndDict() {
-        return builder_.EndDict();
+
+    Builder& DictBuilder::EndDict() {
+        return  builder_.EndDict();
     }
 
-    Builder::ArrayItemContext::ArrayItemContext(Builder& builder)
-        : BuilderContext(builder) {}
 
-    Builder::ArrayItemContext Builder::ArrayItemContext::Value(const json::Node::Value& value) {
-        return ArrayItemContext(GetBuilder().Value(value));
+    DictBuilder ValueBuilder::Value(const Data& value) {
+        return DictBuilder(builder_.Value(value));
     }
 
-    Builder::DictItemContext::DictItemContext(Builder& builder)
-        : BuilderContext(builder) {}
+    DictBuilder ValueBuilder::StartDict() {
+        return builder_.StartDict();
+    }
 
-    Builder::DictValueContext::DictValueContext(Builder& builder)
-        : BuilderContext(builder) {}
-
-    Builder::DictItemContext Builder::DictValueContext::Value(const Node::Value& value) {
-        return DictItemContext(GetBuilder().Value(value));
+    ArrayBuilder ValueBuilder::StartArray() {
+        return builder_.StartArray();
     }
 
 }

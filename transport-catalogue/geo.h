@@ -1,24 +1,20 @@
 #pragma once
 
+#include <cmath>
+
 namespace geo {
 
-    struct Coordinates {
+	struct Coordinates {
+		double lat;
+		double lng;
+	};
 
-        Coordinates() = default;
-        Coordinates(Coordinates&& other) = default;
-        Coordinates(const Coordinates& other) = default;
-        Coordinates& operator=(Coordinates&& other) = default;
-        Coordinates& operator=(const Coordinates& other) = default;
-
-        Coordinates(double l, double r)
-            : lat(l), lng(r) {
-        }
-
-        double lat = 0.0;
-        double lng = 0.0;
-    };
-
-    bool operator <(const Coordinates& lhs, const Coordinates& rhs);
-    double ComputeDistance(Coordinates from, Coordinates to);
+	inline double ComputeDistance(Coordinates from, Coordinates to) {
+		using namespace std;
+		static const double dr = 3.1415926535 / 180.;
+		return acos(sin(from.lat * dr) * sin(to.lat * dr)
+			+ cos(from.lat * dr) * cos(to.lat * dr) * cos(abs(from.lng - to.lng) * dr))
+			* 6371000;
+	}
 
 }

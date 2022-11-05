@@ -1,49 +1,42 @@
 #include "domain.h"
-
+#include <iostream>
 #include <iomanip>
+#include <ostream>
 
-namespace TransportCatalogue {
-    using namespace std::literals;
+namespace transport::domains {
+	using namespace std::literals;
 
-    Stop::Stop(std::string_view name, geo::Coordinates coordinates_)
-        : name_stop(std::string(name)), coordinates(coordinates_) {
-    }
+	void Stop::Parse(const json::Dict& request) {
+		name = request.at("name"s).AsString();
+		coordinates = {
+			request.at("latitude"s).AsDouble(),
+			request.at("longitude"s).AsDouble()
+		};
 
-    bool Stop::operator==(const Stop& other) const {
-        return name_stop == other.name_stop;
-    }
+		for (const auto& [stop_name, distance] : request.at("road_distances"s).AsMap()) {
+			road_distanse[stop_name] = distance.AsInt();
+		}
+	}
 
-    Bus::Bus(std::string_view name, bool loop, BusStaticInformation inform)
-        : name_bus(std::string(name)), looping(loop), static_infom(inform) {
-    }
+	void Bus::Parse(const json::Dict& request) {
+		name = request.at("name"s).AsString();
+		is_roundtrip = request.at("is_roundtrip"s).AsBool();
 
-    bool Bus::operator==(const Bus& other) const {
-        return name_bus == other.name_bus;
-    }
+		for (const auto& stop_name : request.at("stops"s).AsArray()) {
+			stops.push_back(stop_name.AsString());
+		}
+	}
 
-    namespace detail {
+	int RealLenBeetwenStops(std::shared_ptr<Stop> from, std::shared_ptr<Stop> to) {
+		if (from == nullptr || to == nullptr) throw std::invalid_argument("stops no find");
 
-        bool operator==(const InformationBus& le, const InformationBus& other) {
-            return le.curv == other.curv && le.distance == other.distance;
-        }
+		auto it = from->road_distanse.find(to->name);
+		if (it != from->road_distanse.end()) return it->second;
 
-        std::ostream& operator<<(std::ostream& out, const InformationBus& doc) {
-            out << doc.static_infom_bus.number_stops << " stops on route, "s;
-            out << doc.static_infom_bus.number_stops_un << " unique stops, "s;
-            out << std::setprecision(6) << doc.distance << " route length, "s;
-            out << std::setprecision(6) << doc.curv << " curvature"s;
-            return out;
-        }
+		it = to->road_distanse.find(from->name);
+		if (it != to->road_distanse.end()) return it->second;
 
-        size_t HasherPairStops::operator()(const std::pair<const Stop*, const Stop*>& plate) const {
-            return hasher(plate.first) + hasher(plate.second) * 38;
-        }
-
-        bool BusHasher::operator()(const Bus* lhs, const Bus* rhs) const {
-            return std::lexicographical_compare(lhs->name_bus.begin(), lhs->name_bus.end(),
-                rhs->name_bus.begin(), rhs->name_bus.end());
-        }
-
-    }//namespace detail
-
-}//namespace TransportCatalogue
+		return 0;
+	}
+	
+}

@@ -1,26 +1,20 @@
 syntax = "proto3";
 
-package transport_catalogue_proto;
-
-message Rgb {
-    uint32 r = 1;
-    uint32 g = 2;
-    uint32 b = 3;
-}
+package SvgProto;
 
 message Rgba {
-    uint32 r = 1;
-    uint32 g = 2;
-    uint32 b = 3;
-    double a = 4;
+  uint32 red = 1;
+  uint32 green = 2;
+  uint32 blue = 3;
+  bool has_opacity = 4;
+  double opacity = 5;
 }
 
-message StringColor{
-    string string_color = 1;
-}
 
 message Color {
-    Rgb rgb = 1;
-    Rgba rgba = 2;
-    StringColor str_color = 3;
+  oneof data {
+    bool is_none = 1;
+    string name = 2;
+    Rgba rgba = 3;
+  }
 }
